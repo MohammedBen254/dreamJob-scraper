@@ -101,6 +101,18 @@ poetry run dreamjob migrate
 poetry run dreamjob health
 ```
 
+> **Note (Windows users):** If `poetry run dreamjob ...` returns `'dreamjob' is not recognized as an internal or external command`, the Poetry entry-point shim wasn't generated in the venv. You can run the same commands by invoking the module directly:
+>
+> ```bash
+> poetry run python -m src.main scrape      # one-shot scrape → match → notify
+> poetry run python -m src.main schedule    # scheduler daemon (default at 08:00)
+> poetry run python -m src.main migrate     # alembic upgrade head
+> poetry run python -m src.main health      # health server on :8080
+> poetry run python -m src.main             # defaults to `schedule`
+> ```
+>
+> To permanently restore the `dreamjob` command, recreate the virtualenv: `poetry env remove python && poetry install`.
+
 ### Docker (production)
 
 ```bash
