@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+.venv/
+venv/
+.ruff_cache/
+
+temp_*
+
+# Poetry
+poetry.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.coverage.*
+*.log
+
+# Docker
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+profile.yaml
+*.db

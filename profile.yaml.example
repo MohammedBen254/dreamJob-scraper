@@ -1,0 +1,31 @@
+target_keywords:
+  data_analyst:
+    - python
+    - sql
+    - tableau
+    - power bi
+    - analyse de données
+    - data visualization
+  ai_ml:
+    - machine learning
+    - intelligence artificielle
+    - deep learning
+    - tensorflow
+    - pytorch
+  web_dev:
+    - react
+    - angular
+    - javascript
+    - full stack
+    - développeur web
+  it:
+    - réseau
+    - cybersécurité
+    - devops
+    - cloud
+    - linux
+excluded_terms:
+  - senior 10+ ans
+  - CDD
+  - chauffeur
+threshold: 60

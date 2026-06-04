@@ -1,0 +1,63 @@
+[project]
+name = "dreamjob-scraper"
+version = "0.1.0"
+description = "Job scraper for dreamjob.ma"
+authors = [
+    {name = "DreamJobs Scraper"}
+]
+requires-python = ">=3.11"
+dependencies = [
+    "httpx",
+    "beautifulsoup4",
+    "lxml",
+    "pydantic",
+    "pydantic-settings",
+    "pyyaml",
+    "sqlalchemy[asyncio]",
+    "asyncpg",
+    "alembic",
+    "redis",
+    "apscheduler",
+    "jinja2",
+    "aiosmtplib",
+    "thefuzz",
+    "python-levenshtein",
+    "structlog",
+]
+
+[project.scripts]
+dreamjob = "src.main:main"
+
+[tool.poetry]
+package-mode = false
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+ignore_missing_imports = true
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[dependency-groups]
+dev = [
+    "pytest (>=9.0.3,<10.0.0)",
+    "pytest-asyncio (>=1.4.0,<2.0.0)",
+    "pytest-cov (>=7.1.0,<8.0.0)",
+    "ruff (>=0.15.15,<0.16.0)",
+    "mypy (>=2.1.0,<3.0.0)",
+    "black (>=26.5.1,<27.0.0)"
+]

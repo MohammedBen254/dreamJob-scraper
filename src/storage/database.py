@@ -1,0 +1,70 @@
+import enum
+from datetime import date, datetime
+
+from sqlalchemy import (
+    Boolean,
+    Date,
+    DateTime,
+    Float,
+    Integer,
+    String,
+    Text,
+    func,
+)
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+from src.config import settings
+
+engine = create_async_engine(settings.database_url, echo=False)
+async_session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+
+class ScrapeStatus(enum.Enum):
+    running = "running"
+    completed = "completed"
+    failed = "failed"
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+class JobRecord(Base):
+    __tablename__ = "jobs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    url: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    company: Mapped[str | None] = mapped_column(Text, nullable=True)
+    location: Mapped[str | None] = mapped_column(Text, nullable=True)
+    category: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    date_posted: Mapped[date | None] = mapped_column(Date, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    salary: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    match_score: Mapped[float] = mapped_column(Float, default=0.0)
+    notified: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class ScrapeRunRecord(Base):
+    __tablename__ = "scrape_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    jobs_found: Mapped[int] = mapped_column(Integer, default=0)
+    jobs_new: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(
+        String(20), default=ScrapeStatus.running.value
+    )

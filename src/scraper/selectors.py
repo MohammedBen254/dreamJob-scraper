@@ -1,0 +1,6 @@
+LISTING_CONTAINER = "article.jeg_post"
+TITLE_SELECTOR = "h3.jeg_post_title a"
+DATE_SELECTOR = ".jeg_meta_date a"
+META_SELECTOR = ".jeg_post_meta"
+CONTENT_SELECTOR = "div.content-inner"
+NEXT_PAGE_SELECTOR = "a[rel='next']"
