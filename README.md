@@ -16,15 +16,15 @@ PostgreSQL (SQLAlchemy async + Alembic)
 Email Notifier (Jinja2 HTML + aiosmtplib)
 ```
 
-| Component | Technology | Role |
-|-----------|-----------|------|
-| **Client** | `httpx.AsyncClient` | Fetches pages with retry, rate limiting, rotating UAs |
-| **Parser** | `beautifulsoup4` + `lxml` | Extracts jobs from listing & detail pages |
-| **Crawler** | asyncio | Orchestrates category/pagination crawling |
-| **Matching** | `thefuzz` | Title fuzzy match (60%) + category (20%) + description (20%) − excluded terms (−30%) |
-| **Storage** | `sqlalchemy[asyncio]` + asyncpg | Dedup via URL unique constraint; tracks scrape runs |
-| **Notifications** | `aiosmtplib` + `jinja2` | HTML email digest of scored matches |
-| **Scheduling** | `apscheduler` | Daily cron at configurable time (default 08:00) |
+| Component         | Technology                      | Role                                                                                 |
+| ----------------- | ------------------------------- | ------------------------------------------------------------------------------------ |
+| **Client**        | `httpx.AsyncClient`             | Fetches pages with retry, rate limiting, rotating UAs                                |
+| **Parser**        | `beautifulsoup4` + `lxml`       | Extracts jobs from listing & detail pages                                            |
+| **Crawler**       | asyncio                         | Orchestrates category/pagination crawling                                            |
+| **Matching**      | `thefuzz`                       | Title fuzzy match (60%) + category (20%) + description (20%) − excluded terms (−30%) |
+| **Storage**       | `sqlalchemy[asyncio]` + asyncpg | Dedup via URL unique constraint; tracks scrape runs                                  |
+| **Notifications** | `aiosmtplib` + `jinja2`         | HTML email digest of scored matches                                                  |
+| **Scheduling**    | `apscheduler`                   | Daily cron at configurable time (default 08:00)                                      |
 
 ## Data Flow
 
@@ -37,12 +37,14 @@ dreamjob.ma ──→ Crawler ──→ Parser ──→ Matcher ──→ DB �
 ### Database Schema
 
 **`jobs` table** — stores every scraped listing:
+
 - `url` (unique) — dedup key
 - `content_hash` (SHA-256 of title+company+description) — detects updated posts
 - `match_score` (0–100) — computed by the matching engine
 - `notified` (boolean) — tracks which jobs have been emailed
 
 **`scrape_runs` table** — tracks each execution:
+
 - `started_at`, `finished_at`, `status` (running/completed/failed)
 - `jobs_found`, `jobs_new` — metrics for each run
 
@@ -52,11 +54,11 @@ Your skills profile drives the matching engine:
 
 ```yaml
 target_keywords:
-  data_analyst:   [python, sql, tableau, power bi, ...]
-  ai_ml:          [machine learning, tensorflow, pytorch, ...]
-  web_dev:        [react, angular, javascript, ...]
-  it:             [réseau, cybersécurité, devops, cloud, ...]
-excluded_terms:   [senior 10+ ans, CDD, chauffeur]
+  data_analyst: [python, sql, tableau, power bi, ...]
+  ai_ml: [machine learning, tensorflow, pytorch, ...]
+  web_dev: [react, angular, javascript, ...]
+  it: [réseau, cybersécurité, devops, cloud, ...]
+excluded_terms: [senior 10+ ans, CDD, chauffeur]
 threshold: 60
 ```
 
@@ -121,6 +123,12 @@ docker compose up -d
 
 This starts 4 containers: `postgres`, `redis`, `scraper` (scheduler daemon), `health` (HTTP health endpoint).
 
+Run the scrapper manually using :
+
+```bash
+docker exec [scrapper-container] python -m src.main scrape
+```
+
 ## Managing Data
 
 ### Querying Jobs
@@ -178,16 +186,16 @@ asyncio.run(show())
 
 ## Makefile Targets
 
-| Target | Description |
-|--------|-------------|
-| `make build` | `docker compose build` |
-| `make run` | `docker compose up -d` |
-| `make stop` | `docker compose down` |
-| `make test` | `pytest tests/ -v` |
-| `make lint` | `ruff check src/` |
-| `make typecheck` | `mypy src/` |
-| `make migrate` | `alembic upgrade head` |
-| `make clean` | Remove `__pycache__`, build artifacts |
+| Target           | Description                           |
+| ---------------- | ------------------------------------- |
+| `make build`     | `docker compose build`                |
+| `make run`       | `docker compose up -d`                |
+| `make stop`      | `docker compose down`                 |
+| `make test`      | `pytest tests/ -v`                    |
+| `make lint`      | `ruff check src/`                     |
+| `make typecheck` | `mypy src/`                           |
+| `make migrate`   | `alembic upgrade head`                |
+| `make clean`     | Remove `__pycache__`, build artifacts |
 
 ## Project Map
 
@@ -210,11 +218,11 @@ asyncio.run(show())
 
 ## Decisions
 
-| Concern | Choice |
-|---------|--------|
-| Profile format | YAML — keyword groups per field |
-| Notifications | Email only (abstract `Notifier` — Discord/Slack extendable) |
-| Scrape depth | 5 pages/category (~50 posts) |
-| Dedup | URL unique constraint + content hash |
-| Parsing | BeautifulSoup4 — static HTML, no JS |
-| Health check | Separate container, decoupled from lifecycle |
+| Concern        | Choice                                                      |
+| -------------- | ----------------------------------------------------------- |
+| Profile format | YAML — keyword groups per field                             |
+| Notifications  | Email only (abstract `Notifier` — Discord/Slack extendable) |
+| Scrape depth   | 5 pages/category (~50 posts)                                |
+| Dedup          | URL unique constraint + content hash                        |
+| Parsing        | BeautifulSoup4 — static HTML, no JS                         |
+| Health check   | Separate container, decoupled from lifecycle                |
