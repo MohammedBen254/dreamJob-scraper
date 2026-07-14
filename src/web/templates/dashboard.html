@@ -3,7 +3,7 @@
 {% block content %}
 <h1 class="mb-4">Dashboard</h1>
 <div class="row mb-4">
-    <div class="col-md-4">
+    <div class="col-md-3">
         <div class="card">
             <div class="card-body">
                 <h5 class="card-title">Total Jobs</h5>
@@ -11,6 +11,32 @@
             </div>
         </div>
     </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Parsed</h5>
+                <p class="card-text display-6 text-warning">{{ parsed_count }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Embedded</h5>
+                <p class="card-text display-6 text-info">{{ embedded_count }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Notified</h5>
+                <p class="card-text display-6 text-success">{{ notified_count }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="row mb-4">
     <div class="col-md-4">
         <div class="card">
             <div class="card-body">
@@ -24,6 +50,14 @@
             <div class="card-body">
                 <h5 class="card-title">Last Scrape</h5>
                 <p class="card-text">{{ last_run.strftime('%Y-%m-%d %H:%M') if last_run else 'Never' }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Browse Jobs</h5>
+                <a href="/jobs/" class="btn btn-primary">View All Jobs</a>
             </div>
         </div>
     </div>

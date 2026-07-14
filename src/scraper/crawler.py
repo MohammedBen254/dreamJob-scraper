@@ -1,4 +1,5 @@
 import asyncio
+from typing import AsyncGenerator
 
 from structlog import get_logger
 
@@ -32,6 +33,41 @@ class Crawler:
 
         await self._client.close()
         return all_jobs
+
+    async def scrape_stream(self) -> AsyncGenerator[tuple[JobPosting, str], None]:
+        base = settings.scraper_target_url.rstrip("/")
+        for path in CATEGORY_PATHS:
+            async for job in self._scrape_category_stream(base, path):
+                yield job, path
+        await self._client.close()
+
+    async def _scrape_category_stream(
+        self, base: str, path: str, page: int = 1
+    ) -> AsyncGenerator[JobPosting, None]:
+        if page > settings.scraper_page_limit:
+            return
+
+        url = f"{base}{path}"
+        if page > 1:
+            url = f"{base}{path}page/{page}/"
+
+        logger.info("scraping_listing", url=url, page=page)
+        try:
+            html = await self._client.fetch(url)
+        except Exception as e:
+            logger.error("listing_failed", url=url, error=str(e))
+            return
+
+        entries, next_url = parse_listing_page(html, base)
+        logger.info("parsed_listing", url=url, entries=len(entries))
+
+        jobs = await self._fetch_details(entries)
+        for job in jobs:
+            yield job
+
+        if next_url and page < settings.scraper_page_limit:
+            async for job in self._scrape_category_stream(base, path, page + 1):
+                yield job
 
     async def _scrape_category(self, base: str, path: str, page: int = 1) -> list[JobPosting]:
         if page > settings.scraper_page_limit:

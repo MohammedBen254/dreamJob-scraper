@@ -77,3 +77,67 @@ class TestMarkNotified:
             await repo.mark_notified([record.id])
             await session.refresh(record)
             assert record.notified is True
+
+
+class TestStoreJob:
+    async def test_store_single_job_with_run(self):
+        async with async_session_factory() as session:
+            repo = JobRepository(session)
+            run = await repo.create_run()
+            job = _job()
+            record = await repo.store_job(job, run.id)
+            assert record is not None
+            assert record.status == "parsed"
+            assert record.scrape_run_id == run.id
+
+    async def test_store_duplicate_returns_none(self):
+        async with async_session_factory() as session:
+            repo = JobRepository(session)
+            run = await repo.create_run()
+            job = _job()
+            await repo.store_job(job, run.id)
+            result = await repo.store_job(job, run.id)
+            assert result is None
+
+
+class TestJobStatus:
+    async def test_update_job_status(self):
+        async with async_session_factory() as session:
+            repo = JobRepository(session)
+            run = await repo.create_run()
+            job = _job()
+            record = await repo.store_job(job, run.id)
+            await repo.update_job_status([record.id], "embedded")
+            embedded = await repo.get_jobs_by_status("embedded")
+            assert len(embedded) == 1
+            assert embedded[0].id == record.id
+
+    async def test_get_jobs_by_status_filters(self):
+        async with async_session_factory() as session:
+            repo = JobRepository(session)
+            run = await repo.create_run()
+            j1 = _job("https://www.dreamjob.ma/emploi/a/", "A")
+            j2 = _job("https://www.dreamjob.ma/emploi/b/", "B")
+            r1 = await repo.store_job(j1, run.id)
+            r2 = await repo.store_job(j2, run.id)
+            await repo.update_job_status([r1.id], "embedded")
+            parsed = await repo.get_jobs_by_status("parsed")
+            assert len(parsed) == 1
+            assert parsed[0].id == r2.id
+
+
+class TestRunCategories:
+    async def test_update_run_categories(self):
+        async with async_session_factory() as session:
+            repo = JobRepository(session)
+            run = await repo.create_run()
+            cats = {"emploi": {"pages": 2, "found": 30, "parsed": 28}}
+            await repo.update_run_categories(run.id, cats)
+            from sqlalchemy import select
+            from src.storage.database import ScrapeRunRecord
+
+            result = await session.execute(
+                select(ScrapeRunRecord).where(ScrapeRunRecord.id == run.id)
+            )
+            updated = result.scalar_one()
+            assert updated.categories == cats

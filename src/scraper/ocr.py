@@ -29,12 +29,15 @@ def _image_hash(url: str) -> str:
 async def ocr_image(client: httpx.AsyncClient, url: str) -> str:
     img_hash = _image_hash(url)
     if img_hash in _OCR_CACHE:
+        logger.debug("ocr_cache_hit", url=url)
         return _OCR_CACHE[img_hash]
 
     try:
+        logger.info("ocr_fetch_image", url=url)
         resp = await client.get(url, timeout=30)
         resp.raise_for_status()
         image_b64 = base64.b64encode(resp.content).decode("utf-8")
+        logger.info("ocr_extracting", url=url, size_kb=len(resp.content) // 1024)
         ollama = _get_client()
         response = await ollama.chat(
             model=_OCR_MODEL,
@@ -48,6 +51,7 @@ async def ocr_image(client: httpx.AsyncClient, url: str) -> str:
         )
         text = response["message"]["content"].strip()
         _OCR_CACHE[img_hash] = text
+        logger.info("ocr_success", url=url, text_len=len(text))
         return text
     except Exception as e:
         logger.warning("ocr_failed", url=url, error=str(e))
@@ -60,4 +64,7 @@ def needs_ocr(soup) -> bool:
         return False
     text_len = len(content.get_text(strip=True))
     img_count = len(content.find_all("img"))
-    return img_count > 0 and text_len < 200
+    needs = img_count > 0 and text_len < 200
+    if needs:
+        logger.info("ocr_needed", img_count=img_count, text_len=text_len)
+    return needs

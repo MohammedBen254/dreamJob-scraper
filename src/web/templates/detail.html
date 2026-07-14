@@ -2,28 +2,74 @@
 {% block title %}{{ job.title }}{% endblock %}
 {% block content %}
 <h1>{{ job.title }}</h1>
-<dl class="row mt-4">
-    <dt class="col-sm-2">Company</dt>
-    <dd class="col-sm-10">{{ job.company or '-' }}</dd>
-    <dt class="col-sm-2">Location</dt>
-    <dd class="col-sm-10">{{ job.location or '-' }}</dd>
-    <dt class="col-sm-2">Category</dt>
-    <dd class="col-sm-10">{{ job.category or '-' }}</dd>
-    <dt class="col-sm-2">Date Posted</dt>
-    <dd class="col-sm-10">{{ job.date_posted.strftime('%Y-%m-%d') if job.date_posted else '-' }}</dd>
-    <dt class="col-sm-2">Salary</dt>
-    <dd class="col-sm-10">{{ job.salary or '-' }}</dd>
-    <dt class="col-sm-2">Score</dt>
-    <dd class="col-sm-10">{{ job.match_score|round(1) if job.match_score else 'N/A' }}</dd>
-    <dt class="col-sm-2">URL</dt>
-    <dd class="col-sm-10"><a href="{{ job.url }}" target="_blank">{{ job.url }}</a></dd>
-</dl>
 
-<h3 class="mt-4">Description</h3>
-<div class="card">
+{% if query_matches %}
+<div class="card border-success mb-4">
+    <div class="card-header bg-success text-white">Matching Queries</div>
     <div class="card-body">
-        <pre class="mb-0" style="white-space: pre-wrap;">{{ job.description or 'No description available.' }}</pre>
+        <table class="table table-sm mb-0">
+            <thead><tr><th>Query Name</th><th>Query</th><th>Score</th></tr></thead>
+            <tbody>
+                {% for m in query_matches %}
+                <tr>
+                    <td><a href="/query/{{ m.query_id }}">{{ m.name }}</a></td>
+                    <td><em>{{ m.query_text }}</em></td>
+                    <td><span class="badge bg-{{ 'success' if m.score >= 70 else 'warning' if m.score >= 40 else 'secondary' }}">{{ m.score }}%</span></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
 </div>
-<a href="/" class="btn btn-secondary mt-3">Back to Dashboard</a>
+{% endif %}
+
+{% if job.ocr_results %}
+<div class="card border-info mb-4">
+    <div class="card-header bg-info text-white">OCR Results ({{ job.ocr_results|length }} image{{ 's' if job.ocr_results|length > 1 else '' }})</div>
+    <div class="card-body">
+        {% for ocr in job.ocr_results %}
+        <div class="mb-3">
+            <div class="d-flex align-items-start">
+                <a href="{{ ocr.image_url }}" target="_blank">
+                    <img src="{{ ocr.image_url }}" alt="OCR source" style="max-height: 200px; max-width: 300px; object-fit: cover;" class="me-3 rounded border">
+                </a>
+                <div class="flex-grow-1">
+                    <small class="text-muted">Image URL: {{ ocr.image_url }}</small>
+                    <pre class="mt-1 mb-0 p-2 bg-light rounded" style="white-space: pre-wrap; font-size: 0.85rem;">{{ ocr.text }}</pre>
+                </div>
+            </div>
+        </div>
+        {% if not loop.last %}<hr>{% endif %}
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<div class="row">
+    <div class="col-md-8">
+        <h3>Description</h3>
+        <div class="card mb-4">
+            <div class="card-body">
+                <pre class="mb-0" style="white-space: pre-wrap; font-size: 0.9rem;">{{ job.description or 'No description available.' }}</pre>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card mb-3">
+            <div class="card-header">Details</div>
+            <ul class="list-group list-group-flush">
+                <li class="list-group-item"><strong>Company</strong><br>{{ job.company or '-' }}</li>
+                <li class="list-group-item"><strong>Location</strong><br>{{ job.location or '-' }}</li>
+                <li class="list-group-item"><strong>Category</strong><br><span class="badge bg-secondary">{{ job.category or '-' }}</span></li>
+                <li class="list-group-item"><strong>Date Posted</strong><br>{{ job.date_posted.strftime('%Y-%m-%d') if job.date_posted else '-' }}</li>
+                <li class="list-group-item"><strong>Salary</strong><br>{{ job.salary or '-' }}</li>
+                <li class="list-group-item"><strong>Status</strong><br><span class="badge bg-{{ 'success' if job.status == 'notified' else 'info' if job.status == 'embedded' else 'warning' if job.status == 'parsed' else 'secondary' }}">{{ job.status }}</span></li>
+                <li class="list-group-item"><strong>Source</strong><br><a href="{{ job.url }}" target="_blank">{{ job.url }}</a></li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<a href="/jobs/" class="btn btn-secondary mt-3">Back to Jobs</a>
+<a href="/" class="btn btn-outline-secondary mt-3 ms-2">Dashboard</a>
 {% endblock %}

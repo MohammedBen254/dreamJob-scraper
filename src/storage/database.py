@@ -8,9 +8,11 @@ from sqlalchemy import (
     DateTime,
     Float,
     Integer,
+    JSON,
     String,
     Text,
     func,
+    ForeignKey,
 )
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -25,6 +27,13 @@ class ScrapeStatus(enum.Enum):
     running = "running"
     completed = "completed"
     failed = "failed"
+
+
+class JobStatus(enum.Enum):
+    parsed = "parsed"
+    embedded = "embedded"
+    matched = "matched"
+    notified = "notified"
 
 
 class Base(DeclarativeBase):
@@ -46,6 +55,9 @@ class JobRecord(Base):
     content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     embedding: Mapped[list[float] | None] = mapped_column(Vector(768), nullable=True)
     match_score: Mapped[float] = mapped_column(Float, default=0.0)
+    status: Mapped[str] = mapped_column(String(20), default="parsed")
+    scrape_run_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("scrape_runs.id"), nullable=True)
+    ocr_results: Mapped[list | None] = mapped_column(JSON, nullable=True)
     notified: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -62,6 +74,12 @@ class ScrapeRunRecord(Base):
     jobs_found: Mapped[int] = mapped_column(Integer, default=0)
     jobs_new: Mapped[int] = mapped_column(Integer, default=0)
     status: Mapped[str] = mapped_column(String(20), default=ScrapeStatus.running.value)
+    categories: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    pages_scraped: Mapped[int] = mapped_column(Integer, default=0)
+    errors: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    jobs_embedded: Mapped[int] = mapped_column(Integer, default=0)
+    jobs_matched: Mapped[int] = mapped_column(Integer, default=0)
+    jobs_notified: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class QueryRecord(Base):
@@ -70,4 +88,14 @@ class QueryRecord(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     query_text: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class JobMatch(Base):
+    __tablename__ = "job_matches"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    job_id: Mapped[int] = mapped_column(Integer, ForeignKey("jobs.id"), nullable=False)
+    query_id: Mapped[int] = mapped_column(Integer, ForeignKey("queries.id"), nullable=False)
+    score: Mapped[float] = mapped_column(Float, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

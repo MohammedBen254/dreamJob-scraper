@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}All Jobs{% endblock %}
+{% block content %}
+<h1 class="mb-4">All Jobs</h1>
+
+<form method="get" class="row g-3 mb-4">
+    <div class="col-md-3">
+        <label class="form-label">Status</label>
+        <select name="status" class="form-select">
+            <option value="">All</option>
+            <option value="parsed" {{ 'selected' if status == 'parsed' else '' }}>Parsed</option>
+            <option value="embedded" {{ 'selected' if status == 'embedded' else '' }}>Embedded</option>
+            <option value="matched" {{ 'selected' if status == 'matched' else '' }}>Matched</option>
+            <option value="notified" {{ 'selected' if status == 'notified' else '' }}>Notified</option>
+        </select>
+    </div>
+    <div class="col-md-3">
+        <label class="form-label">Category</label>
+        <select name="category" class="form-select">
+            <option value="">All</option>
+            {% for cat in categories %}
+            <option value="{{ cat }}" {{ 'selected' if category == cat else '' }}>{{ cat }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-md-3 d-flex align-items-end">
+        <button type="submit" class="btn btn-primary">Filter</button>
+        <a href="/jobs/" class="btn btn-link ms-2">Reset</a>
+    </div>
+    <div class="col-md-3 d-flex align-items-end">
+        <span class="text-muted">{{ total }} jobs total</span>
+    </div>
+</form>
+
+<div class="table-responsive">
+    <table class="table table-striped table-hover">
+        <thead class="table-dark">
+            <tr>
+                <th>Title</th>
+                <th>Company</th>
+                <th>Location</th>
+                <th>Category</th>
+                <th>Date</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for job in jobs %}
+            <tr>
+                <td><a href="/job/{{ job.id }}">{{ job.title }}</a></td>
+                <td>{{ job.company or '-' }}</td>
+                <td>{{ job.location or '-' }}</td>
+                <td><span class="badge bg-secondary">{{ job.category or '-' }}</span></td>
+                <td>{{ job.date_posted.strftime('%Y-%m-%d') if job.date_posted else '-' }}</td>
+                <td><span class="badge bg-{{ 'success' if job.status == 'notified' else 'info' if job.status == 'embedded' else 'warning' if job.status == 'parsed' else 'secondary' }}">{{ job.status }}</span></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if total_pages > 1 %}
+<nav>
+    <ul class="pagination">
+        {% if page > 1 %}
+        <li class="page-item"><a class="page-link" href="?page={{ page - 1 }}&status={{ status }}&category={{ category }}">Previous</a></li>
+        {% endif %}
+        <li class="page-item disabled"><span class="page-link">Page {{ page }} of {{ total_pages }}</span></li>
+        {% if page < total_pages %}
+        <li class="page-item"><a class="page-link" href="?page={{ page + 1 }}&status={{ status }}&category={{ category }}">Next</a></li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}
+
+<a href="/" class="btn btn-secondary mt-3">Back to Dashboard</a>
+{% endblock %}

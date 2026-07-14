@@ -158,6 +158,7 @@ async def parse_detail_page(
     description = content_el.get_text("\n", strip=True) if content_el else None
 
     # OCR for image-heavy pages
+    ocr_results: list[dict] | None = None
     if needs_ocr(soup) and client:
         img_urls = []
         for img in soup.select(".entry-content img, .content-inner img"):
@@ -165,13 +166,16 @@ async def parse_detail_page(
             if src:
                 img_urls.append(str(src))
         ocr_texts = []
+        ocr_data = []
         for img_url in img_urls:
             text = await ocr_image(client._client, img_url)
             if text:
                 ocr_texts.append(text)
+                ocr_data.append({"image_url": img_url, "text": text})
         if ocr_texts:
             ocr_combined = "\n".join(ocr_texts)
             description = (description or "") + "\n" + ocr_combined
+            ocr_results = ocr_data
 
     category = _infer_category(job_url)
 
@@ -184,6 +188,7 @@ async def parse_detail_page(
         date_posted=meta_date or _parse_date(date_text),
         description=description,
         salary=salary,
+        ocr_results=ocr_results,
     )
     posting.compute_hash()
     return posting
