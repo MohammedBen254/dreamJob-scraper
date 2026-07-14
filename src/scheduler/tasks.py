@@ -24,16 +24,22 @@ async def scrape_and_store() -> None:
 
         run = await repo.create_run()
         new_count = await repo.store_jobs(jobs)
+        logger.info("jobs_stored", new=new_count, total=len(jobs))
         await repo.finish_run(run.id, len(jobs), new_count)
 
         stored = await repo.get_all_jobs_with_embeddings()
         unembedded = [j for j in stored if j.embedding is None]
         if unembedded:
             logger.info("embedding_jobs", count=len(unembedded))
-            embeddings = await embed_jobs(unembedded)
-            for job, emb in zip(unembedded, embeddings):
-                await repo.store_embedding(job.id, emb)
-            logger.info("embedding_complete")
+            try:
+                embeddings = await embed_jobs(unembedded)
+                for job, emb in zip(unembedded, embeddings):
+                    await repo.store_embedding(job.id, emb)
+                logger.info("embedding_complete", count=len(embeddings))
+            except Exception as e:
+                logger.error("embedding_failed", error=str(e), unembedded_count=len(unembedded))
+        else:
+            logger.info("no_unembedded_jobs")
 
     # Send email notifications for matching jobs
     await _notify_matches()
@@ -44,16 +50,19 @@ async def _notify_matches() -> None:
         repo = JobRepository(session)
         queries = await repo.get_queries()
         if not queries:
+            logger.info("no_saved_queries_skip_notify")
             return
 
         jobs = await repo.get_all_jobs_with_embeddings()
         job_embeddings = [j.embedding for j in jobs if j.embedding]
         if not job_embeddings:
+            logger.info("no_embedded_jobs_skip_notify")
             return
 
         matching_jobs = []
 
         for query in queries:
+            logger.info("matching_query", query_name=query.name, query_text=query.query_text[:80])
             query_vec = await embed_query(query.query_text)
             ranked = rank_jobs(query_vec, job_embeddings, top_k=len(jobs))
             for r in ranked:
@@ -72,6 +81,7 @@ async def _notify_matches() -> None:
             if sent:
                 job_ids = [j.id for j in matching_jobs]
                 await repo.mark_notified(job_ids)
+                logger.info("notification_sent", count=len(job_ids))
         else:
             logger.info("no_matching_jobs")
 

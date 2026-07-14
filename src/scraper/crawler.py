@@ -67,6 +67,7 @@ class Crawler:
             try:
                 html = await self._client.fetch(url)
                 job = await parse_detail_page(html, url, self._client)
+                logger.debug("detail_parsed", url=url, title=job.title[:60] if job.title else "")
                 return job
             except Exception as e:
                 logger.error("detail_failed", url=url, error=str(e))
@@ -74,4 +75,6 @@ class Crawler:
 
         tasks = [fetch_one(*e) for e in entries]
         results = await asyncio.gather(*tasks)
-        return [j for j in results if j is not None]
+        parsed = [j for j in results if j is not None]
+        logger.info("details_done", attempted=len(entries), parsed=len(parsed), failed=len(entries) - len(parsed))
+        return parsed

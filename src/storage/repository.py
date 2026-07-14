@@ -2,9 +2,12 @@ from datetime import datetime, timezone
 
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
+from structlog import get_logger
 
 from src.models.job import JobPosting
 from src.storage.database import JobRecord, QueryRecord, ScrapeRunRecord
+
+logger = get_logger()
 
 
 class JobRepository:
@@ -21,11 +24,13 @@ class JobRepository:
 
     async def store_jobs(self, jobs: list[JobPosting]) -> int:
         new_count = 0
+        dup_count = 0
         for job in jobs:
             existing = await self._session.execute(
                 select(JobRecord).where(JobRecord.url == str(job.url)).limit(1)
             )
             if existing.scalar_one_or_none() is not None:
+                dup_count += 1
                 continue
             record = JobRecord(
                 url=str(job.url),
@@ -42,6 +47,7 @@ class JobRepository:
             self._session.add(record)
             new_count += 1
         await self._session.commit()
+        logger.info("store_jobs_done", total=len(jobs), new=new_count, duplicates=dup_count)
         return new_count
 
     async def get_unnotified_jobs(self, threshold: float) -> list[JobRecord]:
@@ -64,6 +70,7 @@ class JobRepository:
     async def store_embedding(self, job_id: int, embedding: list[float]) -> None:
         from sqlalchemy import update
 
+        logger.info("store_embedding", job_id=job_id, dim=len(embedding))
         stmt = update(JobRecord).where(JobRecord.id == job_id).values(embedding=embedding)
         await self._session.execute(stmt)
         await self._session.commit()
@@ -72,7 +79,9 @@ class JobRepository:
         result = await self._session.execute(
             select(JobRecord).where(JobRecord.embedding.isnot(None))
         )
-        return list(result.scalars().all())
+        jobs = list(result.scalars().all())
+        logger.info("get_jobs_with_embeddings", count=len(jobs))
+        return jobs
 
     async def get_queries(self) -> list[QueryRecord]:
         result = await self._session.execute(select(QueryRecord))
@@ -81,10 +90,13 @@ class JobRepository:
     async def seed_queries(self, queries: list[dict]) -> None:
         existing = await self.get_queries()
         existing_names = {q.name for q in existing}
+        added = 0
         for q in queries:
             if q["name"] not in existing_names:
                 self._session.add(QueryRecord(name=q["name"], query_text=q["query"]))
+                added += 1
         await self._session.commit()
+        logger.info("seed_queries_done", total=len(queries), added=added, already_existing=len(queries) - added)
 
     async def has_any_runs(self) -> bool:
         result = await self._session.execute(select(ScrapeRunRecord).limit(1))
@@ -102,6 +114,7 @@ class JobRepository:
         self._session.add(run)
         await self._session.commit()
         await self._session.refresh(run)
+        logger.info("scrape_run_created", run_id=run.id)
         return run
 
     async def finish_run(
@@ -121,3 +134,4 @@ class JobRepository:
         )
         await self._session.execute(stmt)
         await self._session.commit()
+        logger.info("scrape_run_finished", run_id=run_id, jobs_found=jobs_found, jobs_new=jobs_new, status=status)
