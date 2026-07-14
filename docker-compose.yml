@@ -25,8 +25,11 @@ services:
       DATABASE_URL: postgresql+asyncpg://dreamjob:dreamjob@postgres:5432/dreamjob
       SCRAPER_TARGET_URL: https://www.dreamjob.ma
       OLLAMA_HOST: http://host.docker.internal:11434
+      HF_HOME: /home/app/.cache/huggingface
     env_file:
       - .env
+    volumes:
+      - hf_cache:/home/app/.cache/huggingface
 
   web:
     build: .
@@ -43,3 +46,4 @@ services:
 
 volumes:
   postgres_data:
+  hf_cache:

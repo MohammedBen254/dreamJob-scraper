@@ -28,6 +28,7 @@ dependencies = [
     "numpy",
     "ollama",
     "uvicorn",
+    "fastembed",
 ]
 
 [build-system]

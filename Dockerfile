@@ -14,12 +14,16 @@ COPY --from=builder /app/.venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH"
 
 RUN addgroup --system --gid 1001 app && \
-    adduser --system --uid 1001 --gid 1001 app
+    adduser --system --uid 1001 --gid 1001 app && \
+    mkdir -p /home/app/.cache/huggingface && \
+    chown -R app:app /home/app/.cache
 
 COPY alembic.ini ./
 COPY src/ src/
 COPY queries.yaml ./
 COPY scripts/ scripts/
 USER app
+
+ENV HF_HOME=/home/app/.cache/huggingface
 
 ENTRYPOINT ["python", "-m", "src.main"]

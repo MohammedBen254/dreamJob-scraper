@@ -15,6 +15,10 @@ logger = get_logger()
 
 async def cmd_scrape() -> None:
     logger.info("command: scrape")
+    if settings.use_reranker:
+        from src.reranker.engine import init_reranker
+
+        await init_reranker()
     await scrape_and_store()
 
 
@@ -66,6 +70,10 @@ async def _seed_queries(repo) -> None:
 
 async def cmd_schedule() -> None:
     logger.info("command: schedule")
+    if settings.use_reranker:
+        from src.reranker.engine import init_reranker
+
+        await init_reranker()
     await _send_ready_if_first_run()
     scheduler = create_scheduler()
     scheduler.start()

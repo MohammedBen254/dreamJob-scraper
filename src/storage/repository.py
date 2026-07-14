@@ -22,6 +22,12 @@ class JobRepository:
         )
         return result.scalar_one_or_none() is None
 
+    async def get_job_by_url(self, url: str) -> JobRecord | None:
+        result = await self._session.execute(
+            select(JobRecord).where(JobRecord.url == url).limit(1)
+        )
+        return result.scalar_one_or_none()
+
     async def store_jobs(self, jobs: list[JobPosting]) -> int:
         new_count = 0
         dup_count = 0

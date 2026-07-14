@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     email_to: str = ""
     notification_threshold: float = 0.6
     ollama_host: str = "http://localhost:11434"
+    reranker_model: str = "jinaai/jina-reranker-v2-base-multilingual"
+    reranker_top_k: int = 20
+    use_reranker: bool = True
+    stage1_threshold: float = 0.3
 
     model_config = {"env_prefix": "", "case_sensitive": False}
 

@@ -49,8 +49,11 @@ async def scrape_and_store() -> None:
 
         logger.info("queries_embedded", count=len(query_vecs))
 
+        rerank_candidates: dict[int, list[dict]] = {q.id: [] for q, _ in query_vecs}
+        job_records: dict[int, JobRecord] = {}
+        matched_job_ids: set[int] = set()
+
         categories: dict[str, dict] = {}
-        jobs_matched = 0
         jobs_skipped = 0
         total_seen = 0
 
@@ -74,20 +77,16 @@ async def scrape_and_store() -> None:
 
             best_score = 0.0
             best_query = None
-            match_scores: list[tuple] = []
             for q, qvec in query_vecs:
                 scores = rank_jobs(qvec, [job_vec], top_k=1)
                 if scores and scores[0]["score"] > best_score:
                     best_score = scores[0]["score"]
                     best_query = q
-                if scores and scores[0]["score"] >= settings.notification_threshold:
-                    match_scores.append((q, round(scores[0]["score"] * 100, 1)))
 
-            record = await repo.store_job(job, run.id)
-
-            if best_score < settings.notification_threshold:
+            if best_score < settings.stage1_threshold:
                 logger.debug("job_unmatched", url=str(job.url), score=round(best_score * 100, 1))
                 jobs_skipped += 1
+                record = await repo.store_job(job, run.id)
                 if record:
                     await repo.store_embedding(record.id, job_vec)
                     await repo.update_job_status([record.id], "embedded")
@@ -96,27 +95,97 @@ async def scrape_and_store() -> None:
                 cat_stats["unmatched"] = cat_stats.get("unmatched", 0) + 1
                 continue
 
+            record = await repo.store_job(job, run.id)
+
             if record:
                 await repo.store_embedding(record.id, job_vec)
                 await repo.update_job_status([record.id], "embedded")
                 await repo.increment_run_counter(run.id, "jobs_embedded")
-                for q, score in match_scores:
-                    await repo.store_match(record.id, q.id, score)
-                jobs_matched += 1
+                job_records[record.id] = record
+                for q, qvec in query_vecs:
+                    scores = rank_jobs(qvec, [job_vec], top_k=1)
+                    if scores and scores[0]["score"] >= settings.stage1_threshold:
+                        rerank_candidates[q.id].append({
+                            "job_id": record.id,
+                            "job": job,
+                            "job_vec": job_vec,
+                            "cosine_score": round(scores[0]["score"] * 100, 1),
+                            "description": job.description or job.title,
+                            "title": job.title,
+                        })
                 logger.info(
-                    "job_matched_and_stored",
+                    "job_candidate_collected",
                     url=str(job.url),
-                    score=round(best_score * 100, 1),
+                    best_score=round(best_score * 100, 1),
                     query=best_query.name if best_query else "",
                 )
             else:
+                existing = await repo.get_job_by_url(str(job.url))
+                if existing and existing.id:
+                    job_records[existing.id] = existing
+                    if existing.embedding:
+                        for q, qvec in query_vecs:
+                            scores = rank_jobs(qvec, [existing.embedding], top_k=1)
+                            if scores and scores[0]["score"] >= settings.stage1_threshold:
+                                rerank_candidates[q.id].append({
+                                    "job_id": existing.id,
+                                    "cosine_score": round(scores[0]["score"] * 100, 1),
+                                    "description": job.description or job.title,
+                                    "title": job.title,
+                                })
                 logger.debug("job_duplicate", url=str(job.url))
 
             cat_stats = categories.setdefault(category_path, {"found": 0, "matched": 0, "skipped": 0})
             cat_stats["found"] = cat_stats.get("found", 0) + 1
             cat_stats["matched"] = cat_stats.get("matched", 0) + 1
 
-        logger.info("scrape_stream_complete", total_seen=total_seen, matched=jobs_matched, skipped=jobs_skipped)
+        logger.info("scrape_stream_complete", total_seen=total_seen, stage1_candidates=sum(len(v) for v in rerank_candidates.values()), skipped=jobs_skipped)
+
+        if settings.use_reranker:
+            from src.reranker.engine import rerank_query_matches
+
+            for q, qvec in query_vecs:
+                candidates = rerank_candidates[q.id]
+                if not candidates:
+                    logger.info("rerank_skip_no_candidates", query=q.name)
+                    continue
+                logger.info("rerank_start", query=q.name, candidates=len(candidates))
+                try:
+                    reranked = await rerank_query_matches(q.query_text, candidates, top_k=settings.reranker_top_k)
+                except Exception as e:
+                    logger.warning("reranker_failed_fallback_cosine", query_name=q.name, error=str(e))
+                    for c in candidates:
+                        rec = job_records.get(c["job_id"])
+                        if rec:
+                            await repo.store_match(rec.id, q.id, c["cosine_score"])
+                            if c["cosine_score"] >= settings.notification_threshold * 100:
+                                matched_job_ids.add(rec.id)
+                    continue
+                matched_count = 0
+                for c in reranked:
+                    if c["rerank_score"] >= settings.notification_threshold * 100:
+                        rec = job_records.get(c["job_id"])
+                        if rec:
+                            await repo.store_match(rec.id, q.id, c["rerank_score"])
+                            matched_job_ids.add(rec.id)
+                            matched_count += 1
+                logger.info(
+                    "rerank_complete",
+                    query=q.name,
+                    candidates=len(candidates),
+                    reranked=len(reranked),
+                    matched=matched_count,
+                    top_score=reranked[0]["rerank_score"] if reranked else 0,
+                )
+        else:
+            for q, qvec in query_vecs:
+                candidates = rerank_candidates[q.id]
+                for c in candidates:
+                    if c["cosine_score"] >= settings.notification_threshold * 100:
+                        rec = job_records.get(c["job_id"])
+                        if rec:
+                            await repo.store_match(rec.id, q.id, c["cosine_score"])
+                            matched_job_ids.add(rec.id)
 
         await repo.update_run_categories(run.id, categories)
 
@@ -125,8 +194,8 @@ async def scrape_and_store() -> None:
         )
         jobs_found = jobs_found_result.scalar() or 0
 
-        await repo.finish_run(run.id, jobs_found, jobs_matched)
-        logger.info("scrape_cycle_complete", run_id=run.id, jobs_found=jobs_found, matched=jobs_matched, skipped=jobs_skipped)
+        await repo.finish_run(run.id, jobs_found, len(matched_job_ids))
+        logger.info("scrape_cycle_complete", run_id=run.id, jobs_found=jobs_found, matched=len(matched_job_ids), skipped=jobs_skipped)
 
     await _notify_matches(run.id)
 
@@ -155,14 +224,48 @@ async def _notify_matches(run_id: int | None = None) -> None:
             logger.info("matching_query", query_name=query.name, query_text=query.query_text[:80])
             query_vec = await embed_query(query.query_text)
             ranked = rank_jobs(query_vec, job_embeddings, top_k=len(embedded_jobs))
-            for r in ranked:
-                job = embedded_jobs[r["corpus_id"]]
-                score = r["score"]
-                if score >= settings.notification_threshold and job.id not in {
-                    j.id for j in matching_jobs
-                }:
-                    job.match_score = round(score * 100, 1)
-                    matching_jobs.append(job)
+
+            if settings.use_reranker:
+                from src.reranker.engine import rerank_query_matches
+
+                top_candidates = []
+                for r in ranked:
+                    job = embedded_jobs[r["corpus_id"]]
+                    if r["score"] >= settings.stage1_threshold:
+                        top_candidates.append({
+                            "job_id": job.id,
+                            "description": job.description or job.title,
+                            "title": job.title,
+                            "cosine_score": round(r["score"] * 100, 1),
+                        })
+                try:
+                    reranked = await rerank_query_matches(query.query_text, top_candidates, top_k=settings.reranker_top_k)
+                    for c in reranked:
+                        job = next((j for j in embedded_jobs if j.id == c["job_id"]), None)
+                        if job and c["rerank_score"] >= settings.notification_threshold * 100 and job.id not in {
+                            j.id for j in matching_jobs
+                        }:
+                            job.match_score = c["rerank_score"]
+                            matching_jobs.append(job)
+                except Exception as e:
+                    logger.warning("reranker_failed_fallback_cosine", query_name=query.name, error=str(e))
+                    for r in ranked:
+                        job = embedded_jobs[r["corpus_id"]]
+                        score = r["score"]
+                        if score >= settings.notification_threshold and job.id not in {
+                            j.id for j in matching_jobs
+                        }:
+                            job.match_score = round(score * 100, 1)
+                            matching_jobs.append(job)
+            else:
+                for r in ranked:
+                    job = embedded_jobs[r["corpus_id"]]
+                    score = r["score"]
+                    if score >= settings.notification_threshold and job.id not in {
+                        j.id for j in matching_jobs
+                    }:
+                        job.match_score = round(score * 100, 1)
+                        matching_jobs.append(job)
 
         if matching_jobs:
             logger.info("matching_jobs", count=len(matching_jobs))
