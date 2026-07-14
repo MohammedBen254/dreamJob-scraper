@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<h1 class="mb-4">Dashboard</h1>
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Total Jobs</h5>
+                <p class="card-text display-6">{{ total_jobs }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Saved Queries</h5>
+                <p class="card-text display-6">{{ queries|length }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Last Scrape</h5>
+                <p class="card-text">{{ last_run.strftime('%Y-%m-%d %H:%M') if last_run else 'Never' }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<h2 class="mb-3">Saved Queries</h2>
+{% if queries %}
+<div class="list-group">
+    {% for q in queries %}
+    <a href="/query/{{ q.id }}" class="list-group-item list-group-item-action">
+        <strong>{{ q.name }}</strong>
+        <small class="text-muted d-block">{{ q.query_text }}</small>
+    </a>
+    {% endfor %}
+</div>
+{% else %}
+<p class="text-muted">No saved queries. Add queries to the database to get started.</p>
+{% endif %}
+{% endblock %}

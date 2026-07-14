@@ -1,5 +1,4 @@
 import pytest
-from pydantic import HttpUrl
 
 from src.scraper.parser import parse_listing_page, parse_detail_page
 
@@ -22,8 +21,11 @@ class TestParseListingPage:
 
 
 class TestParseDetailPage:
-    def test_extracts_all_fields(self, sample_detail_html):
-        job = parse_detail_page(sample_detail_html, "https://www.dreamjob.ma/emploi/data-analyst/")
+    @pytest.mark.asyncio
+    async def test_extracts_all_fields(self, sample_detail_html):
+        job = await parse_detail_page(
+            sample_detail_html, "https://www.dreamjob.ma/emploi/data-analyst/"
+        )
         assert job.title == "Data Analyst"
         assert job.company == "Tech Corp"
         assert job.date_posted is not None
@@ -32,11 +34,15 @@ class TestParseDetailPage:
         assert "Python" in job.description
         assert job.category == "emploi"
 
-    def test_content_hash_is_computed(self, sample_detail_html):
-        job = parse_detail_page(sample_detail_html, "https://www.dreamjob.ma/emploi/data-analyst/")
+    @pytest.mark.asyncio
+    async def test_content_hash_is_computed(self, sample_detail_html):
+        job = await parse_detail_page(
+            sample_detail_html, "https://www.dreamjob.ma/emploi/data-analyst/"
+        )
         assert len(job.content_hash) == 64
 
-    def test_missing_title_handled(self):
+    @pytest.mark.asyncio
+    async def test_missing_title_handled(self):
         html = "<html><body><div class='content-inner'>Some content</div></body></html>"
-        job = parse_detail_page(html, "https://www.dreamjob.ma/emploi/test/")
+        job = await parse_detail_page(html, "https://www.dreamjob.ma/emploi/test/")
         assert job.title == ""

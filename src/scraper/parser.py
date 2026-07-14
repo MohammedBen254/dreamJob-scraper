@@ -6,6 +6,8 @@ from bs4 import BeautifulSoup
 from pydantic import HttpUrl
 
 from src.models.job import JobPosting
+from src.scraper.client import ScrapeClient
+from src.scraper.ocr import needs_ocr, ocr_image
 from src.scraper.selectors import (
     CONTENT_SELECTOR,
     DATE_SELECTOR,
@@ -16,7 +18,9 @@ from src.scraper.selectors import (
 )
 
 
-def parse_listing_page(html: str, base_url: str) -> tuple[list[tuple[str, str, str | None, str | None]], str | None]:
+def parse_listing_page(
+    html: str, base_url: str
+) -> tuple[list[tuple[str, str, str | None, str | None]], str | None]:
     soup = BeautifulSoup(html, "lxml")
     cards = soup.select(LISTING_CONTAINER)
     results: list[tuple[str, str, str | None, str | None]] = []
@@ -99,9 +103,22 @@ def _extract_company(soup: BeautifulSoup) -> str | None:
 def _extract_location(soup: BeautifulSoup) -> str | None:
     for el in soup.select(".jeg_post_meta span, .location, .jeg_meta_location"):
         text = el.get_text(strip=True)
-        if any(c in text.lower() for c in
-               ["maroc", "casablanca", "rabat", "tanger", "marrakech", "fès",
-                "fes", "meknès", "meknes", "oujda", "agadir"]):
+        if any(
+            c in text.lower()
+            for c in [
+                "maroc",
+                "casablanca",
+                "rabat",
+                "tanger",
+                "marrakech",
+                "fès",
+                "fes",
+                "meknès",
+                "meknes",
+                "oujda",
+                "agadir",
+            ]
+        ):
             return text
     return None
 
@@ -120,7 +137,9 @@ def _extract_salary(soup: BeautifulSoup) -> str | None:
     return None
 
 
-def parse_detail_page(html: str, job_url: str) -> JobPosting:
+async def parse_detail_page(
+    html: str, job_url: str, client: ScrapeClient | None = None
+) -> JobPosting:
     soup = BeautifulSoup(html, "lxml")
     title_el = soup.select_one("h1.jeg_post_title")
     title = title_el.get_text(strip=True) if title_el else ""
@@ -137,6 +156,22 @@ def parse_detail_page(html: str, job_url: str) -> JobPosting:
 
     content_el = soup.select_one(CONTENT_SELECTOR)
     description = content_el.get_text("\n", strip=True) if content_el else None
+
+    # OCR for image-heavy pages
+    if needs_ocr(soup) and client:
+        img_urls = []
+        for img in soup.select(".entry-content img, .content-inner img"):
+            src = img.get("src")
+            if src:
+                img_urls.append(str(src))
+        ocr_texts = []
+        for img_url in img_urls:
+            text = await ocr_image(client._client, img_url)
+            if text:
+                ocr_texts.append(text)
+        if ocr_texts:
+            ocr_combined = "\n".join(ocr_texts)
+            description = (description or "") + "\n" + ocr_combined
 
     category = _infer_category(job_url)
 
@@ -173,10 +208,27 @@ def _guess_location_from_text(text: str | None) -> str | None:
     if not text:
         return None
     cities = [
-        "casablanca", "rabat", "tanger", "marrakech", "fès", "fes",
-        "meknès", "meknes", "oujda", "agadir", "kenitra", "el jadida",
-        "tétouan", "tetouan", "safi", "beni mellal", "nador", "laâyoune",
-        "laayoune", "dakhla", "maroc",
+        "casablanca",
+        "rabat",
+        "tanger",
+        "marrakech",
+        "fès",
+        "fes",
+        "meknès",
+        "meknes",
+        "oujda",
+        "agadir",
+        "kenitra",
+        "el jadida",
+        "tétouan",
+        "tetouan",
+        "safi",
+        "beni mellal",
+        "nador",
+        "laâyoune",
+        "laayoune",
+        "dakhla",
+        "maroc",
     ]
     text_lower = text.lower()
     for city in cities:

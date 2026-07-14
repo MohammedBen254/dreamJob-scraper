@@ -7,7 +7,7 @@ COPY pyproject.toml poetry.lock ./
 RUN poetry config virtualenvs.in-project true && \
     poetry install --no-root --only main
 
-FROM python:3.11-slim AS runtime
+FROM python:3.11-slim
 
 WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
@@ -19,8 +19,6 @@ RUN addgroup --system --gid 1001 app && \
 COPY alembic.ini ./
 COPY src/ src/
 COPY scripts/ scripts/
-COPY profile.yaml ./
-
 USER app
 
 ENTRYPOINT ["python", "-m", "src.main"]

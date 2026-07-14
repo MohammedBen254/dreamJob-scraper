@@ -23,13 +23,15 @@ dependencies = [
     "thefuzz",
     "python-levenshtein",
     "structlog",
+    "fastapi",
+    "pgvector",
+    "numpy",
+    "ollama",
+    "uvicorn",
 ]
 
-[project.scripts]
-dreamjob = "src.main:main"
-
 [tool.poetry]
-package-mode = false
+packages = [{include = "src"}]
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

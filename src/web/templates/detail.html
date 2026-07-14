@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}{{ job.title }}{% endblock %}
+{% block content %}
+<h1>{{ job.title }}</h1>
+<dl class="row mt-4">
+    <dt class="col-sm-2">Company</dt>
+    <dd class="col-sm-10">{{ job.company or '-' }}</dd>
+    <dt class="col-sm-2">Location</dt>
+    <dd class="col-sm-10">{{ job.location or '-' }}</dd>
+    <dt class="col-sm-2">Category</dt>
+    <dd class="col-sm-10">{{ job.category or '-' }}</dd>
+    <dt class="col-sm-2">Date Posted</dt>
+    <dd class="col-sm-10">{{ job.date_posted.strftime('%Y-%m-%d') if job.date_posted else '-' }}</dd>
+    <dt class="col-sm-2">Salary</dt>
+    <dd class="col-sm-10">{{ job.salary or '-' }}</dd>
+    <dt class="col-sm-2">Score</dt>
+    <dd class="col-sm-10">{{ job.match_score|round(1) if job.match_score else 'N/A' }}</dd>
+    <dt class="col-sm-2">URL</dt>
+    <dd class="col-sm-10"><a href="{{ job.url }}" target="_blank">{{ job.url }}</a></dd>
+</dl>
+
+<h3 class="mt-4">Description</h3>
+<div class="card">
+    <div class="card-body">
+        <pre class="mb-0" style="white-space: pre-wrap;">{{ job.description or 'No description available.' }}</pre>
+    </div>
+</div>
+<a href="/" class="btn btn-secondary mt-3">Back to Dashboard</a>
+{% endblock %}

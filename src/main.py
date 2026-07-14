@@ -1,22 +1,33 @@
 import asyncio
 import sys
 
+import uvicorn
 from structlog import get_logger
 
 from src.config import settings
-from src.scheduler.tasks import create_scheduler, scrape_and_notify
+from src.scheduler.tasks import create_scheduler, scrape_and_store
 
 logger = get_logger()
 
 
 async def cmd_scrape() -> None:
     logger.info("command: scrape")
-    await scrape_and_notify()
+    await scrape_and_store()
+
+
+async def cmd_web() -> None:
+    logger.info("command: web")
+    from src.web.app import app
+
+    config = uvicorn.Config(app, host="0.0.0.0", port=settings.web_port, log_level="info")
+    server = uvicorn.Server(config)
+    await server.serve()
 
 
 async def _run_migrations() -> None:
     from alembic.config import Config as AlembicConfig
     from alembic import command
+
     loop = asyncio.get_running_loop()
     cfg = AlembicConfig("alembic.ini")
     await loop.run_in_executor(None, command.upgrade, cfg, "head")
@@ -56,6 +67,7 @@ async def cmd_migrate() -> None:
 
 def main() -> None:
     import logging
+
     logging.basicConfig(level=logging.INFO)
 
     cmd = sys.argv[1] if len(sys.argv) > 1 else "schedule"
@@ -66,11 +78,14 @@ def main() -> None:
         asyncio.run(cmd_schedule())
     elif cmd == "migrate":
         asyncio.run(cmd_migrate())
+    elif cmd == "web":
+        asyncio.run(cmd_web())
     elif cmd == "health":
         from scripts.healthcheck import run_health_server
+
         run_health_server()
     else:
-        print("Usage: dreamjob {scrape|schedule|health|migrate}")
+        print("Usage: dreamjob {scrape|schedule|web|health|migrate}")
         sys.exit(1)
 
 

@@ -4,7 +4,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.job import JobPosting
-from src.storage.database import JobRecord, ScrapeRunRecord
+from src.storage.database import JobRecord, QueryRecord, ScrapeRunRecord
 
 
 class JobRepository:
@@ -13,9 +13,9 @@ class JobRepository:
 
     async def is_new_job(self, url: str, content_hash: str) -> bool:
         result = await self._session.execute(
-            select(JobRecord).where(
-                (JobRecord.url == url) | (JobRecord.content_hash == content_hash)
-            ).limit(1)
+            select(JobRecord)
+            .where((JobRecord.url == url) | (JobRecord.content_hash == content_hash))
+            .limit(1)
         )
         return result.scalar_one_or_none() is None
 
@@ -46,10 +46,9 @@ class JobRepository:
 
     async def get_unnotified_jobs(self, threshold: float) -> list[JobRecord]:
         result = await self._session.execute(
-            select(JobRecord).where(
-                (JobRecord.match_score >= threshold)
-                & (not JobRecord.notified)
-            ).order_by(JobRecord.match_score.desc())
+            select(JobRecord)
+            .where((JobRecord.match_score >= threshold) & (not JobRecord.notified))
+            .order_by(JobRecord.match_score.desc())
         )
         return list(result.scalars().all())
 
@@ -57,24 +56,34 @@ class JobRepository:
         if not job_ids:
             return
         from sqlalchemy import update
-        stmt = (
-            update(JobRecord)
-            .where(JobRecord.id.in_(job_ids))
-            .values(notified=True)
-        )
+
+        stmt = update(JobRecord).where(JobRecord.id.in_(job_ids)).values(notified=True)
         await self._session.execute(stmt)
         await self._session.commit()
 
-    async def has_any_runs(self) -> bool:
+    async def store_embedding(self, job_id: int, embedding: list[float]) -> None:
+        from sqlalchemy import update
+
+        stmt = update(JobRecord).where(JobRecord.id == job_id).values(embedding=embedding)
+        await self._session.execute(stmt)
+        await self._session.commit()
+
+    async def get_all_jobs_with_embeddings(self) -> list[JobRecord]:
         result = await self._session.execute(
-            select(ScrapeRunRecord).limit(1)
+            select(JobRecord).where(JobRecord.embedding.isnot(None))
         )
+        return list(result.scalars().all())
+
+    async def get_queries(self) -> list[QueryRecord]:
+        result = await self._session.execute(select(QueryRecord))
+        return list(result.scalars().all())
+
+    async def has_any_runs(self) -> bool:
+        result = await self._session.execute(select(ScrapeRunRecord).limit(1))
         return result.scalar_one_or_none() is not None
 
     async def get_last_run_time(self) -> datetime | None:
-        result = await self._session.execute(
-            select(func.max(ScrapeRunRecord.finished_at))
-        )
+        result = await self._session.execute(select(func.max(ScrapeRunRecord.finished_at)))
         return result.scalar()
 
     async def create_run(self) -> ScrapeRunRecord:
@@ -91,6 +100,7 @@ class JobRepository:
         self, run_id: int, jobs_found: int, jobs_new: int, status: str = "completed"
     ) -> None:
         from sqlalchemy import update
+
         stmt = (
             update(ScrapeRunRecord)
             .where(ScrapeRunRecord.id == run_id)

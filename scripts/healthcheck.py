@@ -40,13 +40,8 @@ async def check_redis() -> dict[str, Any]:
 
 
 async def check_all() -> dict[str, Any]:
-    pg_result, redis_result = await asyncio.gather(
-        check_postgres(), check_redis()
-    )
-    all_ok = (
-        pg_result["status"] == "ok"
-        and redis_result["status"] == "ok"
-    )
+    pg_result, redis_result = await asyncio.gather(check_postgres(), check_redis())
+    all_ok = pg_result["status"] == "ok" and redis_result["status"] == "ok"
     return {
         "status": "ok" if all_ok else "degraded",
         "timestamp": datetime.now(timezone.utc).isoformat(),

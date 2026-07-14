@@ -45,7 +45,7 @@ class EmailNotifier(Notifier):
     async def send_ready(self, next_run: str) -> bool:
         html = self._ready_template.render(
             next_run=next_run,
-            threshold=settings.matching_threshold,
+            threshold=round(settings.notification_threshold * 100),
             page_limit=settings.scraper_page_limit,
             categories=["emploi", "stage", "emploi-public", "emploi-international"],
         )
@@ -60,10 +60,7 @@ class EmailNotifier(Notifier):
             return True
 
         categories = {j.category for j in jobs if j.category}
-        subject = (
-            f"[DreamJob Scraper] {len(jobs)} new matches"
-            f" — {', '.join(sorted(categories))}"
-        )
+        subject = f"[DreamJob Scraper] {len(jobs)} new matches — {', '.join(sorted(categories))}"
         html = self._digest_template.render(
             jobs=sorted(jobs, key=lambda j: j.match_score, reverse=True),
         )

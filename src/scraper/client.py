@@ -50,7 +50,7 @@ class ScrapeClient:
                         error=str(e),
                     )
                     if attempt < 2:
-                        wait = 2 ** attempt * random.uniform(1, 2)
+                        wait = 2**attempt * random.uniform(1, 2)
                         await asyncio.sleep(wait)
             if last_error is not None:
                 raise last_error

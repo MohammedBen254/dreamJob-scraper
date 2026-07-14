@@ -46,6 +46,7 @@ def sample_detail_html() -> str:
 def sample_job_posting():
     from src.models.job import JobPosting
     from pydantic import HttpUrl
+
     return JobPosting(
         title="Data Analyst",
         company="Tech Corp",
@@ -53,16 +54,4 @@ def sample_job_posting():
         category="emploi",
         url=HttpUrl("https://www.dreamjob.ma/emploi/data-analyst/"),
         description="Python SQL Tableau data analysis",
-    )
-
-
-@pytest.fixture
-def sample_profile():
-    from src.models.profile import UserProfile
-    return UserProfile(
-        target_keywords={
-            "data_analyst": ["python", "sql", "tableau"],
-        },
-        excluded_terms=["senior", "CDD"],
-        threshold=60,
     )

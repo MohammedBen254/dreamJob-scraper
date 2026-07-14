@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="fr">
 <head>
   <meta charset="utf-8">
@@ -20,11 +20,11 @@
 <body>
   <div class="container">
     <div class="header">
-      <h1>DreamJob Scraper — New Matches</h1>
+      <h1>DreamJob Scraper ΓÇö New Matches</h1>
     </div>
     <div class="content">
       <p>Bonjour,</p>
-      <p>Nous avons trouvé <strong>{{ jobs|length }}</strong> nouvelle(s) offre(s) correspondant à votre profil :</p>
+      <p>Nous avons trouv├⌐ <strong>{{ jobs|length }}</strong> nouvelle(s) offre(s) correspondant ├á votre profil :</p>
       <table>
         <thead>
           <tr>
@@ -32,7 +32,7 @@
             <th>Titre</th>
             <th>Entreprise</th>
             <th>Localisation</th>
-            <th>Posté</th>
+            <th>Post├⌐</th>
           </tr>
         </thead>
         <tbody>
@@ -40,9 +40,9 @@
           <tr>
             <td class="score">{{ "%.0f"|format(job.match_score) }}%</td>
             <td><a class="link" href="{{ job.url }}">{{ job.title }}</a></td>
-            <td>{{ job.company or "—" }}</td>
-            <td>{{ job.location or "—" }}</td>
-            <td>{{ job.date_posted.strftime("%d/%m/%Y") if job.date_posted else "—" }}</td>
+            <td>{{ job.company or "ΓÇö" }}</td>
+            <td>{{ job.location or "ΓÇö" }}</td>
+            <td>{{ job.date_posted.strftime("%d/%m/%Y") if job.date_posted else "ΓÇö" }}</td>
           </tr>
           {% endfor %}
         </tbody>

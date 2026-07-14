@@ -50,11 +50,8 @@ class TestGetUnnotified:
 
             from sqlalchemy import update
             from src.storage.database import JobRecord
-            stmt = (
-                update(JobRecord)
-                .where(JobRecord.title == "High Score")
-                .values(match_score=80)
-            )
+
+            stmt = update(JobRecord).where(JobRecord.title == "High Score").values(match_score=80)
             await session.execute(stmt)
             await session.commit()
 
@@ -73,6 +70,7 @@ class TestMarkNotified:
 
             from sqlalchemy import select
             from src.storage.database import JobRecord
+
             result = await session.execute(select(JobRecord).limit(1))
             record = result.scalar_one()
 
