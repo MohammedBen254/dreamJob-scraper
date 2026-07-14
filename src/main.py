@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import asyncio
 import sys
 
+import yaml
 import uvicorn
 from structlog import get_logger
 
@@ -41,11 +44,24 @@ async def _send_ready_if_first_run() -> None:
     await _run_migrations()
     async with async_session_factory() as session:
         repo = JobRepository(session)
+        await _seed_queries(repo)
         if not await repo.has_any_runs():
             hour, minute = settings.scraper_run_time.split(":")
             next_run = f"{hour}:{minute}"
             notifier = EmailNotifier()
             await notifier.send_ready(next_run)
+
+
+async def _seed_queries(repo) -> None:
+    import pathlib
+
+    path = pathlib.Path(settings.queries_path)
+    if path.exists():
+        with open(path) as f:
+            queries = yaml.safe_load(f)
+        if queries:
+            await repo.seed_queries(queries)
+            logger.info("queries_seeded", count=len(queries))
 
 
 async def cmd_schedule() -> None:
@@ -65,6 +81,19 @@ async def cmd_migrate() -> None:
     await _run_migrations()
 
 
+async def cmd_seed() -> None:
+    from src.storage.database import async_session_factory
+    from src.storage.repository import JobRepository
+
+    await _run_migrations()
+    with open(settings.queries_path) as f:
+        queries = yaml.safe_load(f)
+    async with async_session_factory() as session:
+        repo = JobRepository(session)
+        await repo.seed_queries(queries)
+    logger.info("queries_seeded", count=len(queries))
+
+
 def main() -> None:
     import logging
 
@@ -78,6 +107,8 @@ def main() -> None:
         asyncio.run(cmd_schedule())
     elif cmd == "migrate":
         asyncio.run(cmd_migrate())
+    elif cmd == "seed":
+        asyncio.run(cmd_seed())
     elif cmd == "web":
         asyncio.run(cmd_web())
     elif cmd == "health":
@@ -85,7 +116,7 @@ def main() -> None:
 
         run_health_server()
     else:
-        print("Usage: dreamjob {scrape|schedule|web|health|migrate}")
+        print("Usage: dreamjob {scrape|schedule|web|health|migrate|seed}")
         sys.exit(1)
 
 

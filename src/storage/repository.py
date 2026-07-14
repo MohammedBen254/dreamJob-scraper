@@ -78,6 +78,14 @@ class JobRepository:
         result = await self._session.execute(select(QueryRecord))
         return list(result.scalars().all())
 
+    async def seed_queries(self, queries: list[dict]) -> None:
+        existing = await self.get_queries()
+        existing_names = {q.name for q in existing}
+        for q in queries:
+            if q["name"] not in existing_names:
+                self._session.add(QueryRecord(name=q["name"], query_text=q["query"]))
+        await self._session.commit()
+
     async def has_any_runs(self) -> bool:
         result = await self._session.execute(select(ScrapeRunRecord).limit(1))
         return result.scalar_one_or_none() is not None

@@ -35,6 +35,6 @@ htmlcov/
 Thumbs.db
 
 # Project specific
-profile.yaml
+queries.yaml
 *.db
 docs/
