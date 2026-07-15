@@ -112,5 +112,10 @@ class Crawler:
         tasks = [fetch_one(*e) for e in entries]
         results = await asyncio.gather(*tasks)
         parsed = [j for j in results if j is not None]
-        logger.info("details_done", attempted=len(entries), parsed=len(parsed), failed=len(entries) - len(parsed))
+        logger.info(
+            "details_done",
+            attempted=len(entries),
+            parsed=len(parsed),
+            failed=len(entries) - len(parsed),
+        )
         return parsed

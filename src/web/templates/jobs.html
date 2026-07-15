@@ -40,6 +40,7 @@
                 <th>Company</th>
                 <th>Location</th>
                 <th>Category</th>
+                <th>Score</th>
                 <th>Date</th>
                 <th>Status</th>
             </tr>
@@ -51,8 +52,9 @@
                 <td>{{ job.company or '-' }}</td>
                 <td>{{ job.location or '-' }}</td>
                 <td><span class="badge bg-secondary">{{ job.category or '-' }}</span></td>
+                <td>{% if best_scores.get(job.id) %}<span class="badge bg-{{ 'success' if best_scores[job.id] >= 70 else 'warning' if best_scores[job.id] >= 40 else 'secondary' }}">{{ best_scores[job.id] }}%</span>{% else %}-{% endif %}</td>
                 <td>{{ job.date_posted.strftime('%Y-%m-%d') if job.date_posted else '-' }}</td>
-                <td><span class="badge bg-{{ 'success' if job.status == 'notified' else 'info' if job.status == 'embedded' else 'warning' if job.status == 'parsed' else 'secondary' }}">{{ job.status }}</span></td>
+                <td><span class="badge bg-{{ 'success' if job.status == 'notified' else 'info' if job.status == 'embedded' else 'warning' if job.status == 'matched' else 'secondary' }}">{{ job.status }}</span></td>
             </tr>
             {% endfor %}
         </tbody>

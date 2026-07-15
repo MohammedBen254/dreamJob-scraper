@@ -15,6 +15,7 @@ _executor = ThreadPoolExecutor(max_workers=1)
 
 
 def _get_reranker():
+
     global _reranker
     if _reranker is None:
         from fastembed.rerank.cross_encoder import TextCrossEncoder
@@ -34,9 +35,17 @@ def rerank_pairs(
     documents: list[str],
 ) -> list[float]:
     reranker = _get_reranker()
-    raw_scores = list(reranker.rerank(query, documents))
-    normalized = [1 / (1 + math.exp(-s)) for s in raw_scores]
-    return normalized
+    results = list(reranker.rerank(query, documents))
+    scores = []
+    for r in results:
+        if hasattr(r, "relevance_score"):
+            scores.append(r.relevance_score)
+        else:
+            raw = float(r)
+            normalized = 1 / (1 + math.exp(-raw))
+            logger.info("rerank_raw_score", raw=raw, normalized=round(normalized, 4))
+            scores.append(normalized)
+    return scores
 
 
 async def rerank_query_matches(

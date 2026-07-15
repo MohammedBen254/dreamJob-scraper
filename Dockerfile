@@ -15,7 +15,7 @@ ENV PATH="/app/.venv/bin:$PATH"
 
 RUN addgroup --system --gid 1001 app && \
     adduser --system --uid 1001 --gid 1001 app && \
-    mkdir -p /home/app/.cache/huggingface && \
+    mkdir -p /home/app/.cache/huggingface /home/app/.cache/fastembed && \
     chown -R app:app /home/app/.cache
 
 COPY alembic.ini ./
@@ -25,5 +25,6 @@ COPY scripts/ scripts/
 USER app
 
 ENV HF_HOME=/home/app/.cache/huggingface
+ENV FASTEMBED_CACHE_PATH=/home/app/.cache/fastembed
 
 ENTRYPOINT ["python", "-m", "src.main"]

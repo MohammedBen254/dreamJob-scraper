@@ -25,7 +25,12 @@ def upgrade() -> None:
         sa.Column("job_id", sa.Integer(), nullable=False),
         sa.Column("query_id", sa.Integer(), nullable=False),
         sa.Column("score", sa.Float(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["job_id"], ["jobs.id"]),
         sa.ForeignKeyConstraint(["query_id"], ["queries.id"]),
         sa.PrimaryKeyConstraint("id"),

@@ -3,7 +3,6 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 
-from src.config import settings
 from src.storage.database import async_session_factory
 from src.storage.repository import JobRepository
 
@@ -22,15 +21,19 @@ async def dashboard(request: Request):
         from sqlalchemy import select, func
         from src.storage.database import JobRecord as JR
 
-        parsed_count = (await session.execute(
-            select(func.count()).select_from(JR).where(JR.status == "parsed")
-        )).scalar() or 0
-        embedded_count = (await session.execute(
-            select(func.count()).select_from(JR).where(JR.status == "embedded")
-        )).scalar() or 0
-        notified_count = (await session.execute(
-            select(func.count()).select_from(JR).where(JR.status == "notified")
-        )).scalar() or 0
+        parsed_count = (
+            await session.execute(select(func.count()).select_from(JR).where(JR.status == "parsed"))
+        ).scalar() or 0
+        embedded_count = (
+            await session.execute(
+                select(func.count()).select_from(JR).where(JR.status == "embedded")
+            )
+        ).scalar() or 0
+        notified_count = (
+            await session.execute(
+                select(func.count()).select_from(JR).where(JR.status == "notified")
+            )
+        ).scalar() or 0
 
     return templates.TemplateResponse(
         request,
@@ -51,7 +54,7 @@ async def jobs_list(request: Request, page: int = 1, status: str = "", category:
     per_page = 30
     async with async_session_factory() as session:
         from sqlalchemy import select, func
-        from src.storage.database import JobRecord as JR
+        from src.storage.database import JobRecord as JR, JobMatch
 
         query = select(JR).order_by(JR.created_at.desc())
         count_query = select(func.count()).select_from(JR)
@@ -67,9 +70,19 @@ async def jobs_list(request: Request, page: int = 1, status: str = "", category:
         results = await session.execute(query.offset((page - 1) * per_page).limit(per_page))
         jobs = list(results.scalars().all())
 
-        categories = list(await session.execute(
-            select(JR.category).distinct().order_by(JR.category)
-        ))
+        job_ids = [j.id for j in jobs]
+        best_scores = {}
+        if job_ids:
+            match_rows = await session.execute(
+                select(JobMatch.job_id, func.max(JobMatch.score))
+                .where(JobMatch.job_id.in_(job_ids))
+                .group_by(JobMatch.job_id)
+            )
+            best_scores = {row[0]: row[1] for row in match_rows}
+
+        categories = list(
+            await session.execute(select(JR.category).distinct().order_by(JR.category))
+        )
         categories = [c[0] for c in categories if c[0]]
 
         total_pages = max(1, (total + per_page - 1) // per_page)
@@ -79,6 +92,7 @@ async def jobs_list(request: Request, page: int = 1, status: str = "", category:
         "jobs.html",
         {
             "jobs": jobs,
+            "best_scores": best_scores,
             "page": page,
             "total_pages": total_pages,
             "total": total,
@@ -101,7 +115,7 @@ async def query_results(request: Request, query_id: int):
         if not query_record:
             return HTMLResponse("Query not found", status_code=404)
 
-        matches = await repo.get_matches_for_query(query_id, threshold=settings.notification_threshold * 100)
+        matches = await repo.get_matches_for_query(query_id)
         if not matches:
             return templates.TemplateResponse(
                 request,
@@ -160,7 +174,12 @@ async def job_detail(request: Request, job_id: int):
             .order_by(JobMatch.score.desc())
         )
         query_matches = [
-            {"query_id": row.id, "name": row.name, "query_text": row.query_text, "score": row[0].score}
+            {
+                "query_id": row.id,
+                "name": row.name,
+                "query_text": row.query_text,
+                "score": row[0].score,
+            }
             for row in match_rows
         ]
 

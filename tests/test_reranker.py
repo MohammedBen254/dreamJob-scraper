@@ -1,14 +1,18 @@
 import pytest
 from unittest.mock import patch, MagicMock
-import math
 
 
-def _make_mock_reranker(raw_scores):
+class MockRerankResult:
+    def __init__(self, relevance_score):
+        self.relevance_score = relevance_score
+
+
+def _make_mock_reranker(scores):
     mock_reranker = MagicMock()
 
     def _rerank_side_effect(query, documents):
         n = len(documents)
-        return raw_scores[:n] + [0.0] * max(0, n - len(raw_scores))
+        return [MockRerankResult(s) for s in scores[:n]]
 
     mock_reranker.rerank.side_effect = _rerank_side_effect
     return mock_reranker
@@ -22,46 +26,40 @@ async def test_rerank_query_matches_empty_candidates():
     assert result == []
 
 
-def test_rerank_pairs_returns_normalized_scores():
+def test_rerank_pairs_returns_relevance_scores():
     from src.reranker.engine import rerank_pairs
 
-    mock_reranker = _make_mock_reranker([2.0, -1.0, 0.0])
+    mock_reranker = _make_mock_reranker([0.88, 0.27, 0.5])
 
     with patch("src.reranker.engine._get_reranker", return_value=mock_reranker):
         scores = rerank_pairs("python developer", ["job1", "job2", "job3"])
 
     assert len(scores) == 3
-    assert 0.0 < scores[0] < 1.0
-    assert 0.0 < scores[1] < 1.0
-    assert 0.0 < scores[2] < 1.0
-    expected_0 = 1 / (1 + math.exp(-2.0))
-    expected_1 = 1 / (1 + math.exp(1.0))
-    expected_2 = 1 / (1 + math.exp(0.0))
-    assert abs(scores[0] - expected_0) < 1e-6
-    assert abs(scores[1] - expected_1) < 1e-6
-    assert abs(scores[2] - expected_2) < 1e-6
+    assert abs(scores[0] - 0.88) < 1e-6
+    assert abs(scores[1] - 0.27) < 1e-6
+    assert abs(scores[2] - 0.5) < 1e-6
 
 
-def test_rerank_pairs_positive_logit_high_score():
+def test_rerank_pairs_high_score():
     from src.reranker.engine import rerank_pairs
 
-    mock_reranker = _make_mock_reranker([5.0])
+    mock_reranker = _make_mock_reranker([0.99])
 
     with patch("src.reranker.engine._get_reranker", return_value=mock_reranker):
         scores = rerank_pairs("query", ["doc"])
 
-    assert scores[0] > 0.99
+    assert scores[0] > 0.95
 
 
-def test_rerank_pairs_negative_logit_low_score():
+def test_rerank_pairs_low_score():
     from src.reranker.engine import rerank_pairs
 
-    mock_reranker = _make_mock_reranker([-5.0])
+    mock_reranker = _make_mock_reranker([0.01])
 
     with patch("src.reranker.engine._get_reranker", return_value=mock_reranker):
         scores = rerank_pairs("query", ["doc"])
 
-    assert scores[0] < 0.01
+    assert scores[0] < 0.05
 
 
 @pytest.mark.asyncio
@@ -73,7 +71,7 @@ async def test_rerank_query_matches_adds_rerank_score():
         {"title": "Optics Sales", "description": "Vendeuse optique Casablanca"},
     ]
 
-    mock_reranker = _make_mock_reranker([3.0, -2.0])
+    mock_reranker = _make_mock_reranker([0.95, 0.12])
 
     with patch("src.reranker.engine._get_reranker", return_value=mock_reranker):
         result = await rerank_query_matches("data analyst python", candidates)
@@ -88,11 +86,9 @@ async def test_rerank_query_matches_adds_rerank_score():
 async def test_rerank_query_matches_respects_top_k():
     from src.reranker.engine import rerank_query_matches
 
-    candidates = [
-        {"title": f"Job {i}", "description": f"Desc {i}"} for i in range(5)
-    ]
+    candidates = [{"title": f"Job {i}", "description": f"Desc {i}"} for i in range(5)]
 
-    mock_reranker = _make_mock_reranker([float(i) for i in range(5)])
+    mock_reranker = _make_mock_reranker([0.9, 0.8, 0.7, 0.6, 0.5])
 
     with patch("src.reranker.engine._get_reranker", return_value=mock_reranker):
         result = await rerank_query_matches("query", candidates, top_k=2)
@@ -106,6 +102,7 @@ def test_reranker_lazy_initialization():
     with patch("fastembed.rerank.cross_encoder.TextCrossEncoder") as mock_cls:
         mock_cls.return_value = MagicMock()
         import src.reranker.engine as engine
+
         engine._reranker = None
         _reranker1 = _get_reranker()
         _reranker2 = _get_reranker()

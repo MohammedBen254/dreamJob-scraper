@@ -6,7 +6,7 @@ services:
       POSTGRES_PASSWORD: dreamjob
       POSTGRES_DB: dreamjob
     ports:
-      - "5432:5432"
+      - "${DB_PORT:-5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dreamjob"]
       interval: 5s
@@ -26,10 +26,12 @@ services:
       SCRAPER_TARGET_URL: https://www.dreamjob.ma
       OLLAMA_HOST: http://host.docker.internal:11434
       HF_HOME: /home/app/.cache/huggingface
+      FASTEMBED_CACHE_PATH: /home/app/.cache/fastembed
     env_file:
       - .env
     volumes:
       - hf_cache:/home/app/.cache/huggingface
+      - fastembed_cache:/home/app/.cache/fastembed
 
   web:
     build: .
@@ -47,3 +49,4 @@ services:
 volumes:
   postgres_data:
   hf_cache:
+  fastembed_cache:

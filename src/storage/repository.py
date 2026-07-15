@@ -23,9 +23,7 @@ class JobRepository:
         return result.scalar_one_or_none() is None
 
     async def get_job_by_url(self, url: str) -> JobRecord | None:
-        result = await self._session.execute(
-            select(JobRecord).where(JobRecord.url == url).limit(1)
-        )
+        result = await self._session.execute(select(JobRecord).where(JobRecord.url == url).limit(1))
         return result.scalar_one_or_none()
 
     async def store_jobs(self, jobs: list[JobPosting]) -> int:
@@ -233,9 +231,7 @@ class JobRepository:
 
     async def store_match(self, job_id: int, query_id: int, score: float) -> JobMatch:
         existing = await self._session.execute(
-            select(JobMatch).where(
-                (JobMatch.job_id == job_id) & (JobMatch.query_id == query_id)
-            )
+            select(JobMatch).where((JobMatch.job_id == job_id) & (JobMatch.query_id == query_id))
         )
         match = existing.scalar_one_or_none()
         if match:

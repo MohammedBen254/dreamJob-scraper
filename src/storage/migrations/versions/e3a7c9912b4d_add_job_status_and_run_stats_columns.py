@@ -19,16 +19,26 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column("jobs", sa.Column("status", sa.String(20), server_default="parsed", nullable=False))
+    op.add_column(
+        "jobs", sa.Column("status", sa.String(20), server_default="parsed", nullable=False)
+    )
     op.add_column("jobs", sa.Column("scrape_run_id", sa.Integer(), nullable=True))
     op.create_foreign_key("fk_jobs_scrape_run_id", "jobs", "scrape_runs", ["scrape_run_id"], ["id"])
 
     op.add_column("scrape_runs", sa.Column("categories", sa.JSON(), nullable=True))
-    op.add_column("scrape_runs", sa.Column("pages_scraped", sa.Integer(), server_default="0", nullable=False))
+    op.add_column(
+        "scrape_runs", sa.Column("pages_scraped", sa.Integer(), server_default="0", nullable=False)
+    )
     op.add_column("scrape_runs", sa.Column("errors", sa.JSON(), nullable=True))
-    op.add_column("scrape_runs", sa.Column("jobs_embedded", sa.Integer(), server_default="0", nullable=False))
-    op.add_column("scrape_runs", sa.Column("jobs_matched", sa.Integer(), server_default="0", nullable=False))
-    op.add_column("scrape_runs", sa.Column("jobs_notified", sa.Integer(), server_default="0", nullable=False))
+    op.add_column(
+        "scrape_runs", sa.Column("jobs_embedded", sa.Integer(), server_default="0", nullable=False)
+    )
+    op.add_column(
+        "scrape_runs", sa.Column("jobs_matched", sa.Integer(), server_default="0", nullable=False)
+    )
+    op.add_column(
+        "scrape_runs", sa.Column("jobs_notified", sa.Integer(), server_default="0", nullable=False)
+    )
 
 
 def downgrade() -> None:

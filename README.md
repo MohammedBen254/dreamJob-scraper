@@ -92,6 +92,7 @@ All settings go in `.env`. The defaults work for local development:
 
 | Variable | What it does | Default |
 | -------- | ------------ | ------- |
+| `DB_PORT` | PostgreSQL port | `5432` |
 | `DATABASE_URL` | PostgreSQL connection string | `postgresql+asyncpg://dreamjob:dreamjob@postgres:5432/dreamjob` |
 | `OLLAMA_HOST` | Where Ollama is running | `http://localhost:11434` |
 | `SCRAPER_RUN_TIME` | Daily scrape time | `08:00` |

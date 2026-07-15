@@ -56,7 +56,9 @@ class JobRecord(Base):
     embedding: Mapped[list[float] | None] = mapped_column(Vector(768), nullable=True)
     match_score: Mapped[float] = mapped_column(Float, default=0.0)
     status: Mapped[str] = mapped_column(String(20), default="parsed")
-    scrape_run_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("scrape_runs.id"), nullable=True)
+    scrape_run_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("scrape_runs.id"), nullable=True
+    )
     ocr_results: Mapped[list | None] = mapped_column(JSON, nullable=True)
     notified: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

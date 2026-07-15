@@ -54,7 +54,13 @@ async def embed_jobs(jobs: list) -> list[list[float]]:
         all_chunks.extend(chunks)
         job_chunk_counts.append(len(chunks))
 
-    logger.info("embed_jobs_start", model=_EMBEDDING_MODEL, jobs=len(jobs), chunks=len(all_chunks), batch_size=_EMBED_BATCH_SIZE)
+    logger.info(
+        "embed_jobs_start",
+        model=_EMBEDDING_MODEL,
+        jobs=len(jobs),
+        chunks=len(all_chunks),
+        batch_size=_EMBED_BATCH_SIZE,
+    )
 
     chunk_embeddings: list[list[float]] = []
     for i in range(0, len(all_chunks), _EMBED_BATCH_SIZE):
@@ -64,7 +70,12 @@ async def embed_jobs(jobs: list) -> list[list[float]]:
             response = await client.embed(model=_EMBEDDING_MODEL, input=batch)
             chunk_embeddings.extend([e for e in response["embeddings"]])
         except Exception as e:
-            logger.error("embed_batch_failed", batch=i // _EMBED_BATCH_SIZE + 1, size=len(batch), error=str(e))
+            logger.error(
+                "embed_batch_failed",
+                batch=i // _EMBED_BATCH_SIZE + 1,
+                size=len(batch),
+                error=str(e),
+            )
             raise
 
     job_embeddings: list[list[float]] = []
@@ -75,7 +86,11 @@ async def embed_jobs(jobs: list) -> list[list[float]]:
         job_embeddings.append(avg)
         offset += count
 
-    logger.info("embed_jobs_done", count=len(job_embeddings), dim=len(job_embeddings[0]) if job_embeddings else 0)
+    logger.info(
+        "embed_jobs_done",
+        count=len(job_embeddings),
+        dim=len(job_embeddings[0]) if job_embeddings else 0,
+    )
     return job_embeddings
 
 

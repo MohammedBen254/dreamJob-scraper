@@ -1,3 +1,4 @@
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -6,7 +7,8 @@ class Settings(BaseSettings):
     scraper_request_delay: float = 2.0
     scraper_page_limit: int = 5
     profile_path: str = "profile.yaml"
-    database_url: str = "postgresql+asyncpg://dreamjob:dreamjob@localhost:5432/dreamjob"
+    db_port: int = 5432
+    database_url: str | None = None
     scraper_run_time: str = "08:00"
     web_port: int = 8080
     queries_path: str = "queries.yaml"
@@ -22,6 +24,15 @@ class Settings(BaseSettings):
     reranker_top_k: int = 20
     use_reranker: bool = True
     stage1_threshold: float = 0.3
+    scraper_max_jobs: int = 0
+
+    @model_validator(mode="after")
+    def compute_database_url(self):
+        if self.database_url is None:
+            self.database_url = (
+                f"postgresql+asyncpg://dreamjob:dreamjob@localhost:{self.db_port}/dreamjob"
+            )
+        return self
 
     model_config = {"env_prefix": "", "case_sensitive": False}
 
