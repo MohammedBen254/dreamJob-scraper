@@ -4,7 +4,7 @@
 <h1 class="mb-4">All Jobs</h1>
 
 <form method="get" class="row g-3 mb-4">
-    <div class="col-md-3">
+    <div class="col-md-2">
         <label class="form-label">Status</label>
         <select name="status" class="form-select">
             <option value="">All</option>
@@ -14,7 +14,7 @@
             <option value="notified" {{ 'selected' if status == 'notified' else '' }}>Notified</option>
         </select>
     </div>
-    <div class="col-md-3">
+    <div class="col-md-2">
         <label class="form-label">Category</label>
         <select name="category" class="form-select">
             <option value="">All</option>
@@ -23,12 +23,25 @@
             {% endfor %}
         </select>
     </div>
-    <div class="col-md-3 d-flex align-items-end">
-        <button type="submit" class="btn btn-primary">Filter</button>
-        <a href="/jobs/" class="btn btn-link ms-2">Reset</a>
+    <div class="col-md-2">
+        <label class="form-label">Scrape Run</label>
+        <select name="run_id" class="form-select">
+            <option value="">All Runs</option>
+            {% for run in scrape_runs %}
+            <option value="{{ run.id }}" {{ 'selected' if run_id == run.id else '' }}>Run #{{ run.id }} ({{ run.started_at.strftime('%Y-%m-%d %H:%M') if run.started_at else '-' }})</option>
+            {% endfor %}
+        </select>
     </div>
-    <div class="col-md-3 d-flex align-items-end">
-        <span class="text-muted">{{ total }} jobs total</span>
+    <div class="col-md-2">
+        <label class="form-label">Min Score</label>
+        <input type="number" name="min_score" class="form-control" value="{{ min_score if min_score else '' }}" min="0" max="100" step="1" placeholder="0-100">
+    </div>
+    <div class="col-md-2 d-flex align-items-end">
+        <button type="submit" class="btn btn-primary me-2">Filter</button>
+        <a href="/jobs/" class="btn btn-link">Reset</a>
+    </div>
+    <div class="col-md-2 d-flex align-items-end">
+        <span class="text-muted">{{ total }} jobs</span>
     </div>
 </form>
 
@@ -52,7 +65,7 @@
                 <td>{{ job.company or '-' }}</td>
                 <td>{{ job.location or '-' }}</td>
                 <td><span class="badge bg-secondary">{{ job.category or '-' }}</span></td>
-                <td>{% if best_scores.get(job.id) %}<span class="badge bg-{{ 'success' if best_scores[job.id] >= 70 else 'warning' if best_scores[job.id] >= 40 else 'secondary' }}">{{ best_scores[job.id] }}%</span>{% else %}-{% endif %}</td>
+                <td>{% if best_scores.get(job.id) %}<span class="badge bg-{{ 'success' if best_scores[job.id] >= 70 else 'warning' if best_scores[job.id] >= 40 else 'secondary' }}">{{ best_scores[job.id] | round(1) }}%</span>{% else %}-{% endif %}</td>
                 <td>{{ job.date_posted.strftime('%Y-%m-%d') if job.date_posted else '-' }}</td>
                 <td><span class="badge bg-{{ 'success' if job.status == 'notified' else 'info' if job.status == 'embedded' else 'warning' if job.status == 'matched' else 'secondary' }}">{{ job.status }}</span></td>
             </tr>
@@ -65,11 +78,11 @@
 <nav>
     <ul class="pagination">
         {% if page > 1 %}
-        <li class="page-item"><a class="page-link" href="?page={{ page - 1 }}&status={{ status }}&category={{ category }}">Previous</a></li>
+        <li class="page-item"><a class="page-link" href="?page={{ page - 1 }}&status={{ status }}&category={{ category }}{% if run_id %}&run_id={{ run_id }}{% endif %}{% if min_score %}&min_score={{ min_score }}{% endif %}">Previous</a></li>
         {% endif %}
         <li class="page-item disabled"><span class="page-link">Page {{ page }} of {{ total_pages }}</span></li>
         {% if page < total_pages %}
-        <li class="page-item"><a class="page-link" href="?page={{ page + 1 }}&status={{ status }}&category={{ category }}">Next</a></li>
+        <li class="page-item"><a class="page-link" href="?page={{ page + 1 }}&status={{ status }}&category={{ category }}{% if run_id %}&run_id={{ run_id }}{% endif %}{% if min_score %}&min_score={{ min_score }}{% endif %}">Next</a></li>
         {% endif %}
     </ul>
 </nav>

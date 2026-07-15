@@ -20,210 +20,221 @@ async def scrape_and_store() -> None:
         repo = JobRepository(session)
         run = await repo.create_run()
 
-        queries = await repo.get_queries()
-        if not queries:
-            logger.warning("no_queries_loaded_seeding")
-            import pathlib
-            import yaml
+    try:
+        async with async_session_factory() as session:
+            repo = JobRepository(session)
 
-            path = pathlib.Path(settings.queries_path)
-            if path.exists():
-                with open(path) as f:
-                    seed_data = yaml.safe_load(f)
-                if seed_data:
-                    await repo.seed_queries(seed_data)
-                    queries = await repo.get_queries()
+            queries = await repo.get_queries()
+            if not queries:
+                logger.warning("no_queries_loaded_seeding")
+                import pathlib
+                import yaml
 
-        query_vecs = []
-        for q in queries:
-            try:
-                vec = await embed_query(q.query_text)
-                query_vecs.append((q, vec))
-            except Exception as e:
-                logger.error("query_embed_failed", query_name=q.name, error=str(e))
+                path = pathlib.Path(settings.queries_path)
+                if path.exists():
+                    with open(path) as f:
+                        seed_data = yaml.safe_load(f)
+                    if seed_data:
+                        await repo.seed_queries(seed_data)
+                        queries = await repo.get_queries()
 
-        if not query_vecs:
-            logger.error("no_query_embeddings_aborting")
-            await repo.finish_run(run.id, 0, 0, status="failed")
-            return
+            query_vecs = []
+            for q in queries:
+                try:
+                    vec = await embed_query(q.query_text)
+                    query_vecs.append((q, vec))
+                except Exception as e:
+                    logger.error("query_embed_failed", query_name=q.name, error=str(e))
 
-        logger.info("queries_embedded", count=len(query_vecs))
+            if not query_vecs:
+                logger.error("no_query_embeddings_aborting")
+                await repo.finish_run(run.id, 0, 0, status="failed")
+                return
 
-        rerank_candidates: dict[int, list[dict]] = {q.id: [] for q, _ in query_vecs}
-        job_records: dict[int, JobRecord] = {}
-        matched_job_ids: set[int] = set()
+            logger.info("queries_embedded", count=len(query_vecs))
 
-        categories: dict[str, dict] = {}
-        jobs_skipped = 0
-        total_seen = 0
+            rerank_candidates: dict[int, list[dict]] = {q.id: [] for q, _ in query_vecs}
+            job_records: dict[int, JobRecord] = {}
+            matched_job_ids: set[int] = set()
 
-        crawler = Crawler()
-        async for job, category_path in crawler.scrape_stream():
-            if settings.scraper_max_jobs > 0 and total_seen >= settings.scraper_max_jobs:
-                logger.info("max_jobs_reached", max_jobs=settings.scraper_max_jobs)
-                break
-            total_seen += 1
+            categories: dict[str, dict] = {}
+            jobs_skipped = 0
+            total_seen = 0
 
-            try:
-                job_vec = await embed_text(f"{job.title} {job.description or ''}")
-            except Exception as e:
-                logger.error("job_embed_failed", url=str(job.url), error=str(e))
-                await repo.add_run_error(run.id, str(job.url), str(e))
+            crawler = Crawler()
+            async for job, category_path in crawler.scrape_stream():
+                if settings.scraper_max_jobs > 0 and total_seen >= settings.scraper_max_jobs:
+                    logger.info("max_jobs_reached", max_jobs=settings.scraper_max_jobs)
+                    break
+                total_seen += 1
+
+                try:
+                    job_vec = await embed_text(f"{job.title} {job.description or ''}")
+                except Exception as e:
+                    logger.error("job_embed_failed", url=str(job.url), error=str(e))
+                    await repo.add_run_error(run.id, str(job.url), str(e))
+                    record = await repo.store_job(job, run.id)
+                    if record:
+                        await repo.update_job_status([record.id], "parsed")
+                    jobs_skipped += 1
+                    cat_stats = categories.setdefault(
+                        category_path, {"found": 0, "matched": 0, "skipped": 0, "unmatched": 0}
+                    )
+                    cat_stats["found"] = cat_stats.get("found", 0) + 1
+                    cat_stats["skipped"] = cat_stats.get("skipped", 0) + 1
+                    continue
+
+                best_score = 0.0
+                best_query = None
+                for q, qvec in query_vecs:
+                    scores = rank_jobs(qvec, [job_vec], top_k=1)
+                    if scores and scores[0]["score"] > best_score:
+                        best_score = scores[0]["score"]
+                        best_query = q
+
+                if best_score < settings.stage1_threshold:
+                    logger.debug("job_unmatched", url=str(job.url), score=round(best_score * 100, 1))
+                    jobs_skipped += 1
+                    record = await repo.store_job(job, run.id)
+                    if record:
+                        await repo.store_embedding(record.id, job_vec)
+                        await repo.update_job_status([record.id], "embedded")
+                    cat_stats = categories.setdefault(
+                        category_path, {"found": 0, "matched": 0, "skipped": 0, "unmatched": 0}
+                    )
+                    cat_stats["found"] = cat_stats.get("found", 0) + 1
+                    cat_stats["unmatched"] = cat_stats.get("unmatched", 0) + 1
+                    continue
+
                 record = await repo.store_job(job, run.id)
-                if record:
-                    await repo.update_job_status([record.id], "parsed")
-                jobs_skipped += 1
-                cat_stats = categories.setdefault(
-                    category_path, {"found": 0, "matched": 0, "skipped": 0, "unmatched": 0}
-                )
-                cat_stats["found"] = cat_stats.get("found", 0) + 1
-                cat_stats["skipped"] = cat_stats.get("skipped", 0) + 1
-                continue
 
-            best_score = 0.0
-            best_query = None
-            for q, qvec in query_vecs:
-                scores = rank_jobs(qvec, [job_vec], top_k=1)
-                if scores and scores[0]["score"] > best_score:
-                    best_score = scores[0]["score"]
-                    best_query = q
-
-            if best_score < settings.stage1_threshold:
-                logger.debug("job_unmatched", url=str(job.url), score=round(best_score * 100, 1))
-                jobs_skipped += 1
-                record = await repo.store_job(job, run.id)
                 if record:
                     await repo.store_embedding(record.id, job_vec)
                     await repo.update_job_status([record.id], "embedded")
+                    await repo.increment_run_counter(run.id, "jobs_embedded")
+                    job_records[record.id] = record
+                    for q, qvec in query_vecs:
+                        scores = rank_jobs(qvec, [job_vec], top_k=1)
+                        if scores and scores[0]["score"] >= settings.stage1_threshold:
+                            rerank_candidates[q.id].append(
+                                {
+                                    "job_id": record.id,
+                                    "job": job,
+                                    "job_vec": job_vec,
+                                    "cosine_score": round(scores[0]["score"] * 100, 1),
+                                    "description": job.description or job.title,
+                                    "title": job.title,
+                                }
+                            )
+                    logger.info(
+                        "job_candidate_collected",
+                        url=str(job.url),
+                        best_score=round(best_score * 100, 1),
+                        query=best_query.name if best_query else "",
+                    )
+                else:
+                    existing = await repo.get_job_by_url(str(job.url))
+                    if existing and existing.id:
+                        job_records[existing.id] = existing
+                        if existing.embedding:
+                            for q, qvec in query_vecs:
+                                scores = rank_jobs(qvec, [existing.embedding], top_k=1)
+                                if scores and scores[0]["score"] >= settings.stage1_threshold:
+                                    rerank_candidates[q.id].append(
+                                        {
+                                            "job_id": existing.id,
+                                            "cosine_score": round(scores[0]["score"] * 100, 1),
+                                            "description": job.description or job.title,
+                                            "title": job.title,
+                                        }
+                                    )
+                    logger.debug("job_duplicate", url=str(job.url))
+
                 cat_stats = categories.setdefault(
-                    category_path, {"found": 0, "matched": 0, "skipped": 0, "unmatched": 0}
+                    category_path, {"found": 0, "matched": 0, "skipped": 0}
                 )
                 cat_stats["found"] = cat_stats.get("found", 0) + 1
-                cat_stats["unmatched"] = cat_stats.get("unmatched", 0) + 1
-                continue
+                cat_stats["matched"] = cat_stats.get("matched", 0) + 1
 
-            record = await repo.store_job(job, run.id)
-
-            if record:
-                await repo.store_embedding(record.id, job_vec)
-                await repo.update_job_status([record.id], "embedded")
-                await repo.increment_run_counter(run.id, "jobs_embedded")
-                job_records[record.id] = record
-                for q, qvec in query_vecs:
-                    scores = rank_jobs(qvec, [job_vec], top_k=1)
-                    if scores and scores[0]["score"] >= settings.stage1_threshold:
-                        rerank_candidates[q.id].append(
-                            {
-                                "job_id": record.id,
-                                "job": job,
-                                "job_vec": job_vec,
-                                "cosine_score": round(scores[0]["score"] * 100, 1),
-                                "description": job.description or job.title,
-                                "title": job.title,
-                            }
-                        )
-                logger.info(
-                    "job_candidate_collected",
-                    url=str(job.url),
-                    best_score=round(best_score * 100, 1),
-                    query=best_query.name if best_query else "",
-                )
-            else:
-                existing = await repo.get_job_by_url(str(job.url))
-                if existing and existing.id:
-                    job_records[existing.id] = existing
-                    if existing.embedding:
-                        for q, qvec in query_vecs:
-                            scores = rank_jobs(qvec, [existing.embedding], top_k=1)
-                            if scores and scores[0]["score"] >= settings.stage1_threshold:
-                                rerank_candidates[q.id].append(
-                                    {
-                                        "job_id": existing.id,
-                                        "cosine_score": round(scores[0]["score"] * 100, 1),
-                                        "description": job.description or job.title,
-                                        "title": job.title,
-                                    }
-                                )
-                logger.debug("job_duplicate", url=str(job.url))
-
-            cat_stats = categories.setdefault(
-                category_path, {"found": 0, "matched": 0, "skipped": 0}
+            logger.info(
+                "scrape_stream_complete",
+                total_seen=total_seen,
+                stage1_candidates=sum(len(v) for v in rerank_candidates.values()),
+                skipped=jobs_skipped,
             )
-            cat_stats["found"] = cat_stats.get("found", 0) + 1
-            cat_stats["matched"] = cat_stats.get("matched", 0) + 1
 
-        logger.info(
-            "scrape_stream_complete",
-            total_seen=total_seen,
-            stage1_candidates=sum(len(v) for v in rerank_candidates.values()),
-            skipped=jobs_skipped,
-        )
+            if settings.use_reranker:
+                from src.reranker.engine import rerank_query_matches
 
-        if settings.use_reranker:
-            from src.reranker.engine import rerank_query_matches
-
-            for q, qvec in query_vecs:
-                candidates = rerank_candidates[q.id]
-                if not candidates:
-                    logger.info("rerank_skip_no_candidates", query=q.name)
-                    continue
-                logger.info("rerank_start", query=q.name, candidates=len(candidates))
-                try:
-                    reranked = await rerank_query_matches(
-                        q.query_text, candidates, top_k=settings.reranker_top_k
+                for q, qvec in query_vecs:
+                    candidates = rerank_candidates[q.id]
+                    if not candidates:
+                        logger.info("rerank_skip_no_candidates", query=q.name)
+                        continue
+                    logger.info("rerank_start", query=q.name, candidates=len(candidates))
+                    try:
+                        reranked = await rerank_query_matches(
+                            q.query_text, candidates, top_k=settings.reranker_top_k
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            "reranker_failed_fallback_cosine", query_name=q.name, error=str(e)
+                        )
+                        for c in candidates:
+                            rec = job_records.get(c["job_id"])
+                            if rec:
+                                await repo.store_match(rec.id, q.id, c["cosine_score"])
+                                if c["cosine_score"] >= settings.notification_threshold * 100:
+                                    matched_job_ids.add(rec.id)
+                        continue
+                    matched_count = 0
+                    for c in reranked:
+                        rec = job_records.get(c["job_id"])
+                        if rec:
+                            await repo.store_match(rec.id, q.id, c["rerank_score"])
+                            if c["rerank_score"] >= settings.notification_threshold * 100:
+                                matched_job_ids.add(rec.id)
+                                matched_count += 1
+                    logger.info(
+                        "rerank_complete",
+                        query=q.name,
+                        candidates=len(candidates),
+                        reranked=len(reranked),
+                        matched=matched_count,
+                        top_score=reranked[0]["rerank_score"] if reranked else 0,
                     )
-                except Exception as e:
-                    logger.warning(
-                        "reranker_failed_fallback_cosine", query_name=q.name, error=str(e)
-                    )
+            else:
+                for q, qvec in query_vecs:
+                    candidates = rerank_candidates[q.id]
                     for c in candidates:
                         rec = job_records.get(c["job_id"])
                         if rec:
                             await repo.store_match(rec.id, q.id, c["cosine_score"])
                             if c["cosine_score"] >= settings.notification_threshold * 100:
                                 matched_job_ids.add(rec.id)
-                    continue
-                matched_count = 0
-                for c in reranked:
-                    rec = job_records.get(c["job_id"])
-                    if rec:
-                        await repo.store_match(rec.id, q.id, c["rerank_score"])
-                        if c["rerank_score"] >= settings.notification_threshold * 100:
-                            matched_job_ids.add(rec.id)
-                            matched_count += 1
-                logger.info(
-                    "rerank_complete",
-                    query=q.name,
-                    candidates=len(candidates),
-                    reranked=len(reranked),
-                    matched=matched_count,
-                    top_score=reranked[0]["rerank_score"] if reranked else 0,
-                )
-        else:
-            for q, qvec in query_vecs:
-                candidates = rerank_candidates[q.id]
-                for c in candidates:
-                    rec = job_records.get(c["job_id"])
-                    if rec:
-                        await repo.store_match(rec.id, q.id, c["cosine_score"])
-                        if c["cosine_score"] >= settings.notification_threshold * 100:
-                            matched_job_ids.add(rec.id)
 
-        await repo.update_run_categories(run.id, categories)
+            await repo.update_run_categories(run.id, categories)
 
-        jobs_found_result = await session.execute(
-            select(func.count()).select_from(JobRecord).where(JobRecord.scrape_run_id == run.id)
-        )
-        jobs_found = jobs_found_result.scalar() or 0
+            jobs_found_result = await session.execute(
+                select(func.count()).select_from(JobRecord).where(JobRecord.scrape_run_id == run.id)
+            )
+            jobs_found = jobs_found_result.scalar() or 0
 
-        await repo.finish_run(run.id, jobs_found, len(matched_job_ids))
-        logger.info(
-            "scrape_cycle_complete",
-            run_id=run.id,
-            jobs_found=jobs_found,
-            matched=len(matched_job_ids),
-            skipped=jobs_skipped,
-        )
+            await repo.finish_run(run.id, jobs_found, len(matched_job_ids))
+            logger.info(
+                "scrape_cycle_complete",
+                run_id=run.id,
+                jobs_found=jobs_found,
+                matched=len(matched_job_ids),
+                skipped=jobs_skipped,
+            )
+
+    except Exception:
+        logger.exception("scrape_cycle_failed", run_id=run.id)
+        async with async_session_factory() as session:
+            repo = JobRepository(session)
+            await repo.finish_run(run.id, 0, 0, status="failed")
+        raise
 
     await _notify_matches(run.id)
 

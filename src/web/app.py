@@ -1,3 +1,5 @@
+from typing import Optional
+
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -19,7 +21,7 @@ async def dashboard(request: Request):
         total_jobs = len(await repo.get_all_jobs_with_embeddings())
 
         from sqlalchemy import select, func
-        from src.storage.database import JobRecord as JR
+        from src.storage.database import JobRecord as JR, ScrapeRunRecord
 
         parsed_count = (
             await session.execute(select(func.count()).select_from(JR).where(JR.status == "parsed"))
@@ -35,6 +37,11 @@ async def dashboard(request: Request):
             )
         ).scalar() or 0
 
+        runs_result = await session.execute(
+            select(ScrapeRunRecord).order_by(ScrapeRunRecord.id.desc()).limit(20)
+        )
+        scrape_runs = list(runs_result.scalars().all())
+
     return templates.TemplateResponse(
         request,
         "dashboard.html",
@@ -45,16 +52,24 @@ async def dashboard(request: Request):
             "parsed_count": parsed_count,
             "embedded_count": embedded_count,
             "notified_count": notified_count,
+            "scrape_runs": scrape_runs,
         },
     )
 
 
 @app.get("/jobs/", response_class=HTMLResponse)
-async def jobs_list(request: Request, page: int = 1, status: str = "", category: str = ""):
+async def jobs_list(
+    request: Request,
+    page: int = 1,
+    status: str = "",
+    category: str = "",
+    run_id: Optional[int] = None,
+    min_score: Optional[float] = None,
+):
     per_page = 30
     async with async_session_factory() as session:
         from sqlalchemy import select, func
-        from src.storage.database import JobRecord as JR, JobMatch
+        from src.storage.database import JobRecord as JR, JobMatch, ScrapeRunRecord
 
         query = select(JR).order_by(JR.created_at.desc())
         count_query = select(func.count()).select_from(JR)
@@ -65,13 +80,29 @@ async def jobs_list(request: Request, page: int = 1, status: str = "", category:
         if category:
             query = query.where(JR.category == category)
             count_query = count_query.where(JR.category == category)
+        if run_id:
+            query = query.where(JR.scrape_run_id == run_id)
+            count_query = count_query.where(JR.scrape_run_id == run_id)
+
+        if min_score is not None and min_score > 0:
+            score_sub = (
+                select(JobMatch.job_id, func.max(JobMatch.score).label("max_score"))
+                .group_by(JobMatch.job_id)
+                .subquery()
+            )
+            query = query.join(score_sub, JR.id == score_sub.c.job_id).where(
+                score_sub.c.max_score >= min_score
+            )
+            count_query = count_query.join(score_sub, JR.id == score_sub.c.job_id).where(
+                score_sub.c.max_score >= min_score
+            )
 
         total = (await session.execute(count_query)).scalar() or 0
         results = await session.execute(query.offset((page - 1) * per_page).limit(per_page))
         jobs = list(results.scalars().all())
 
         job_ids = [j.id for j in jobs]
-        best_scores = {}
+        best_scores: dict[int, float] = {}
         if job_ids:
             match_rows = await session.execute(
                 select(JobMatch.job_id, func.max(JobMatch.score))
@@ -84,6 +115,11 @@ async def jobs_list(request: Request, page: int = 1, status: str = "", category:
             await session.execute(select(JR.category).distinct().order_by(JR.category))
         )
         categories = [c[0] for c in categories if c[0]]
+
+        runs_result = await session.execute(
+            select(ScrapeRunRecord).order_by(ScrapeRunRecord.id.desc()).limit(20)
+        )
+        scrape_runs = list(runs_result.scalars().all())
 
         total_pages = max(1, (total + per_page - 1) // per_page)
 
@@ -98,42 +134,73 @@ async def jobs_list(request: Request, page: int = 1, status: str = "", category:
             "total": total,
             "status": status,
             "category": category,
+            "run_id": run_id,
+            "min_score": min_score,
             "categories": categories,
+            "scrape_runs": scrape_runs,
         },
     )
 
 
 @app.get("/query/{query_id}", response_class=HTMLResponse)
-async def query_results(request: Request, query_id: int):
+async def query_results(
+    request: Request,
+    query_id: int,
+    category: str = "",
+    min_score: Optional[float] = None,
+):
     async with async_session_factory() as session:
         repo = JobRepository(session)
-        from src.storage.database import QueryRecord, JobRecord
-        from sqlalchemy import select
+        from src.storage.database import QueryRecord, JobRecord, JobMatch
+        from sqlalchemy import select, func
 
         result = await session.execute(select(QueryRecord).where(QueryRecord.id == query_id))
         query_record = result.scalar_one_or_none()
         if not query_record:
             return HTMLResponse("Query not found", status_code=404)
 
-        matches = await repo.get_matches_for_query(query_id)
+        match_query = select(JobMatch).where(JobMatch.query_id == query_id)
+
+        if min_score is not None and min_score > 0:
+            match_query = match_query.where(JobMatch.score >= min_score)
+
+        matches_result = await session.execute(
+            match_query.order_by(JobMatch.score.desc())
+        )
+        matches = list(matches_result.scalars().all())
+
         if not matches:
+            categories = list(
+                await session.execute(select(JobRecord.category).distinct().order_by(JobRecord.category))
+            )
+            categories = [c[0] for c in categories if c[0]]
             return templates.TemplateResponse(
                 request,
                 "results.html",
                 {
                     "query": query_record,
                     "results": [],
+                    "category": category,
+                    "min_score": min_score,
+                    "categories": categories,
+                    "total_results": 0,
+                    "shown_results": 0,
                 },
             )
 
         job_ids = [m.job_id for m in matches]
-        jobs_result = await session.execute(select(JobRecord).where(JobRecord.id.in_(job_ids)))
+        jobs_query = select(JobRecord).where(JobRecord.id.in_(job_ids))
+        if category:
+            jobs_query = jobs_query.where(JobRecord.category == category)
+        jobs_result = await session.execute(jobs_query)
         jobs_by_id = {j.id: j for j in jobs_result.scalars().all()}
 
         results = []
         for match in sorted(matches, key=lambda m: m.score, reverse=True):
             job = jobs_by_id.get(match.job_id)
             if job:
+                if category and job.category != category:
+                    continue
                 results.append(
                     {
                         "score": match.score,
@@ -143,8 +210,16 @@ async def query_results(request: Request, query_id: int):
                         "date_posted": job.date_posted,
                         "url": job.url,
                         "id": job.id,
+                        "category": job.category,
                     }
                 )
+
+        categories = list(
+            await session.execute(select(JobRecord.category).distinct().order_by(JobRecord.category))
+        )
+        categories = [c[0] for c in categories if c[0]]
+
+        total_results = len(matches)
 
     return templates.TemplateResponse(
         request,
@@ -152,6 +227,11 @@ async def query_results(request: Request, query_id: int):
         {
             "query": query_record,
             "results": results,
+            "category": category,
+            "min_score": min_score,
+            "categories": categories,
+            "total_results": total_results,
+            "shown_results": len(results),
         },
     )
 

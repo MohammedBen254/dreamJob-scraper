@@ -2,7 +2,30 @@
 {% block title %}Results: {{ query.name }}{% endblock %}
 {% block content %}
 <h1 class="mb-2">{{ query.name }}</h1>
-<p class="text-muted mb-4">Query: <em>{{ query.query_text }}</em></p>
+<p class="text-muted mb-3">Query: <em>{{ query.query_text }}</em></p>
+
+<form method="get" class="row g-3 mb-4">
+    <div class="col-md-3">
+        <label class="form-label">Category</label>
+        <select name="category" class="form-select">
+            <option value="">All</option>
+            {% for cat in categories %}
+            <option value="{{ cat }}" {{ 'selected' if category == cat else '' }}>{{ cat }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-md-3">
+        <label class="form-label">Min Score</label>
+        <input type="number" name="min_score" class="form-control" value="{{ min_score if min_score else '' }}" min="0" max="100" step="1" placeholder="0-100">
+    </div>
+    <div class="col-md-2 d-flex align-items-end">
+        <button type="submit" class="btn btn-primary me-2">Filter</button>
+        <a href="/query/{{ query.id }}" class="btn btn-link">Reset</a>
+    </div>
+    <div class="col-md-4 d-flex align-items-end">
+        <span class="text-muted">{{ shown_results }} of {{ total_results }} results</span>
+    </div>
+</form>
 
 {% if results %}
 <div class="table-responsive">
@@ -13,16 +36,18 @@
                 <th>Title</th>
                 <th>Company</th>
                 <th>Location</th>
+                <th>Category</th>
                 <th>Date</th>
             </tr>
         </thead>
         <tbody>
             {% for r in results %}
             <tr>
-                <td><span class="badge bg-{{ 'success' if r.score >= 70 else 'warning' if r.score >= 40 else 'secondary' }}">{{ r.score }}%</span></td>
+                <td><span class="badge bg-{{ 'success' if r.score >= 70 else 'warning' if r.score >= 40 else 'secondary' }}">{{ r.score | round(1) }}%</span></td>
                 <td><a href="/job/{{ r.id }}">{{ r.title }}</a></td>
                 <td>{{ r.company or '-' }}</td>
                 <td>{{ r.location or '-' }}</td>
+                <td><span class="badge bg-secondary">{{ r.category or '-' }}</span></td>
                 <td>{{ r.date_posted.strftime('%Y-%m-%d') if r.date_posted else '-' }}</td>
             </tr>
             {% endfor %}
